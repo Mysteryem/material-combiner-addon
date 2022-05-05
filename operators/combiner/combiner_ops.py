@@ -6,21 +6,6 @@ from collections import defaultdict
 
 import bpy
 
-try:
-    from PIL import Image
-except ImportError:
-    Image = None
-
-try:
-    from PIL import ImageChops
-except ImportError:
-    ImageChops = None
-
-try:
-    from PIL import ImageFile
-except ImportError:
-    ImageFile = None
-
 from ... import globs
 from ...utils.objects import get_obs
 from ...utils.objects import get_polys
@@ -30,13 +15,8 @@ from ...utils.materials import shader_type
 from ...utils.materials import get_diffuse
 from ...utils.materials import sort_materials
 from ...utils.textures import get_texture
-from ...utils.images import get_image
-from ...utils.images import get_image_path
-
-if Image:
-    Image.MAX_IMAGE_PIXELS = None
-if ImageFile:
-    ImageFile.LOAD_TRUNCATED_IMAGES = True
+from ...utils.images import get_image, get_image_path, new_pixel_buffer, pixel_buffer_paste, get_pixel_buffer,\
+    get_resized_pixel_buffer, buffer_to_image
 
 
 def set_ob_mode(scn):
@@ -146,6 +126,7 @@ def get_size(scn, data):
                 img = mat.node_tree.nodes['Image Texture'].image
         else:
             img = get_image(get_texture(mat))
+        # TODO: Remove the path checks, we should be able to handle any image, not just those with a file
         path = get_image_path(img)
         max_x = max(max([uv.x for uv in i['uv'] if not math.isnan(uv.x)], default=1), 1)
         max_y = max(max([uv.y for uv in i['uv'] if not math.isnan(uv.y)], default=1), 1)
@@ -165,38 +146,47 @@ def get_size(scn, data):
     return OrderedDict(sorted(data.items(), key=lambda x: min(x[1]['gfx']['size']), reverse=True))
 
 
-def get_uv_image(item, img, size):
-    uv_img = Image.new('RGBA', size)
+def get_uv_image(item, img_buffer, size):
+    uv_img = new_pixel_buffer(size)
+    img_w = img_buffer.shape[0]
+    img_h = img_buffer.shape[1]
     for w in range(math.ceil(item['gfx']['uv_size'][0])):
         for h in range(math.ceil(item['gfx']['uv_size'][1])):
-            uv_img.paste(img, (
-                w * img.size[0],
-                uv_img.size[1] - img.size[1] - h * img.size[1],
-                w * img.size[0] + img.size[0],
-                uv_img.size[1] - img.size[1] - h * img.size[1] + img.size[1]
+            pixel_buffer_paste(uv_img, img_buffer, (
+                w * img_w,
+                uv_img.shape[1] - img_h - h * img_h,
+                w * img_w + img_w,
+                uv_img.shape[1] - img_h - h * img_h + img_h
             ))
     return uv_img
 
 
 def get_gfx(scn, mat, item, src):
     size = tuple(size - int(scn.smc_gaps) for size in item['gfx']['size'])
-    if isinstance(src, str):
+    if isinstance(src, bpy.types.Image):
         if src:
-            img = Image.open(src).convert('RGBA')
-            if img.size != size:
-                img.resize(size, Image.ANTIALIAS)
             if mat.smc_size:
-                img.thumbnail((mat.smc_size_width, mat.smc_size_height), Image.ANTIALIAS)
+                img_buffer = get_resized_pixel_buffer(src, (mat.smc_size_width, mat.smc_size_height))
+            elif tuple(src.size) != size:
+                img_buffer = get_resized_pixel_buffer(src, size)
+            else:
+                img_buffer = get_pixel_buffer(src)
             if any(item['gfx']['uv_size']) > 0.999:
-                img = get_uv_image(item, img, size)
+                img_buffer = get_uv_image(item, img_buffer, size)
             if mat.smc_diffuse:
-                diffuse_img = Image.new('RGBA', size, get_diffuse(mat))
-                img = ImageChops.multiply(img, diffuse_img)
+                # TODO: This diffuse_img was in sRGB, surely this needs to be linear?
+                diffuse_color = get_diffuse(mat, convert_to_255_scale=False, linear=True)
+                # Multiply by the diffuse color
+                # 3d slice of [all x, all y, only the first len(diffuse_color) components]
+                # TODO: Could hardcode 3
+                img_buffer[:, :, :len(diffuse_color)] *= diffuse_color
         else:
-            img = Image.new('RGBA', size, get_diffuse(mat))
+            # TODO: We can optimise this by passing in the colour directly
+            img_buffer = new_pixel_buffer(size, get_diffuse(mat, convert_to_255_scale=False))
     else:
-        img = Image.new('RGBA', size, src)
-    return img
+        # src must be a color in a tuple/list of components
+        img_buffer = new_pixel_buffer(size, src)
+    return img_buffer
 
 
 def get_atlas(scn, data, size):
@@ -209,20 +199,22 @@ def get_atlas(scn, data, size):
             item['gfx']['img'] = ''
             shader = shader_type(mat) if mat else None
             if shader == 'mmd':
-                item['gfx']['img'] = get_image_path(mat.node_tree.nodes['mmd_base_tex'].image)
+                item['gfx']['img'] = mat.node_tree.nodes['mmd_base_tex'].image
             elif shader == 'vrm' or shader == 'xnalara' or shader == 'diffuse' or shader == 'emission':
-                item['gfx']['img'] = get_image_path(mat.node_tree.nodes['Image Texture'].image)
+                item['gfx']['img'] = mat.node_tree.nodes['Image Texture'].image
         else:
-            item['gfx']['img'] = get_image_path(get_image(get_texture(mat)))
-    img = Image.new('RGBA', size)
+            item['gfx']['img'] = get_image(get_texture(mat))
+    img = new_pixel_buffer(size)
     for mat, i in data.items():
         if i['gfx']['fit']:
             if i['gfx']['img'] is not None:
-                img.paste(get_gfx(scn, mat, i, i['gfx']['img']), (i['gfx']['fit']['x'] + int(scn.smc_gaps / 2),
-                                                                  i['gfx']['fit']['y'] + int(scn.smc_gaps / 2)))
+                gfx = get_gfx(scn, mat, i, i['gfx']['img'])
+                pixel_buffer_paste(img, gfx, (i['gfx']['fit']['x'] + int(scn.smc_gaps / 2),
+                                              i['gfx']['fit']['y'] + int(scn.smc_gaps / 2)))
+    atlas = buffer_to_image(img, name='temp_material_combine_atlas')
     if scn.smc_size == 'CUST':
-        img.thumbnail((scn.smc_size_width, scn.smc_size_height), Image.ANTIALIAS)
-    return img
+        atlas.scale(scn.smc_size_width, scn.smc_size_height)
+    return atlas
 
 
 def get_aligned_uv(scn, data, size):
@@ -241,11 +233,15 @@ def get_comb_mats(scn, atlas, mats_uv):
     existed_ids = [int(i.mat.name.split('_')[-2]) for i in scn.smc_ob_data if (i.type == 1) and
                    i.mat.name.startswith('material_atlas_')]
     unique_id = random.choice([i for i in range(10000, 99999) if i not in existed_ids])
-    path = os.path.join(scn.smc_save_path, 'Atlas_{0}.png'.format(unique_id))
-    atlas.save(path)
+    atlas_name = 'Atlas_{0}.png'.format(unique_id)
+    path = os.path.join(scn.smc_save_path, atlas_name)
+    # TODO: Should be able to create the image earlier and only rename and save it here
+    atlas.name = atlas_name
+    atlas.source = 'FILE'
+    atlas.filepath = path
+    atlas.save()
     texture = bpy.data.textures.new('texture_atlas_{0}'.format(unique_id), 'IMAGE')
-    image = bpy.data.images.load(path)
-    texture.image = image
+    texture.image = atlas
     mats = {}
     for idx in layers:
         mat = bpy.data.materials.new(name='material_atlas_{0}_{1}'.format(unique_id, idx))
@@ -254,7 +250,7 @@ def get_comb_mats(scn, atlas, mats_uv):
             mat.use_backface_culling = True
             mat.use_nodes = True
             node_texture = mat.node_tree.nodes.new(type='ShaderNodeTexImage')
-            node_texture.image = image
+            node_texture.image = atlas
             node_texture.label = 'Material Combiner Texture'
             node_texture.location = -300, 300
             mat.node_tree.links.new(node_texture.outputs['Color'],

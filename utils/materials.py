@@ -68,32 +68,58 @@ def sort_materials(mat_list):
     return mat_dict
 
 
-def rgb_to_255_scale(diffuse):
-    rgb = []
-    for c in diffuse:
-        if c < 0.0031308:
-            srgb = 0.0 if c < 0.0 else c * 12.92
-        else:
-            srgb = 1.055 * math.pow(c, 1.0 / 2.4) - 0.055
-        rgb.append(max(min(int(srgb * 255 + 0.5), 255), 0))
-    return tuple(rgb)
+# From https://github.com/blender/blender/blob/82df48227bb7742466d429a5b465e0ada95d959d/intern/cycles/kernel/osl/shaders/node_color.h
+def scene_linear_to_srgb(c):
+    if c < 0.0031308:
+        return 0.0 if c < 0.0 else c * 12.92
+    else:
+        return 1.055 * math.pow(c, 1.0 / 2.4) - 0.055
 
 
-def get_diffuse(mat):
+def to_255_scale(c):
+    return max(min(int(c * 255 + 0.5), 255), 0)
+
+
+def rgb_to_srgb(diffuse):
+    return tuple(map(scene_linear_to_srgb, diffuse))
+
+
+# TODO: If we were to want to create an atlas for a data texture such as roughness, the colors should be left as linear
+def get_diffuse(mat, convert_to_255_scale=True, linear=False):
+    """Returns the diffuse RGB from a material,"""
     if globs.version:
         shader = shader_type(mat) if mat else False
+        # Colors in shader nodes are full RGBA, but only the RGB is actually used, so we only get the first 3 components
         if shader == 'mmdCol':
-            return rgb_to_255_scale(mat.node_tree.nodes['mmd_shader'].inputs['Diffuse Color'].default_value[:])
+            color = mat.node_tree.nodes['mmd_shader'].inputs['Diffuse Color'].default_value[:3]
         elif shader == 'vrm':
-            return rgb_to_255_scale(mat.node_tree.nodes['RGB'].outputs[0].default_value[:])
+            color = mat.node_tree.nodes['RGB'].outputs[0].default_value[:3]
         elif shader == 'vrmCol':
-            return rgb_to_255_scale(mat.node_tree.nodes['Group'].inputs[10].default_value[:])
+            color = mat.node_tree.nodes['Group'].inputs[10].default_value[:3]
         elif shader == 'diffuseCol':
-            return rgb_to_255_scale(mat.node_tree.nodes['Diffuse BSDF'].inputs['Color'].default_value[:])
+            color = mat.node_tree.nodes['Diffuse BSDF'].inputs['Color'].default_value[:3]
         elif shader == 'xnalaraNewCol':
-            return rgb_to_255_scale(mat.node_tree.nodes['Group'].inputs['Diffuse'].default_value[:])
+            color = mat.node_tree.nodes['Group'].inputs['Diffuse'].default_value[:3]
         elif shader == 'xnalaraCol':
-            return rgb_to_255_scale(mat.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value[:])
-        return tuple((255, 255, 255))
+            color = mat.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value[:3]
+        else:
+            # White is the same in both linear and srgb, so no conversion is needed
+            if convert_to_255_scale:
+                return 255, 255, 255
+            else:
+                return 1.0, 1.0, 1.0
     else:
-        return rgb_to_255_scale(mat.diffuse_color)
+        color = mat.diffuse_color
+
+    # Shader node colors are linear
+    convert_to_srgb = not linear
+    if convert_to_srgb:
+        color = map(rgb_to_srgb, color)
+    # We may want the colors in a 0-255 scale
+    if convert_to_255_scale:
+        color = tuple(map(to_255_scale, color))
+    elif convert_to_srgb:
+        # If we converted to srgb, color will be left as an iterable map object, so it needs converting back to a tuple
+        color = tuple(color)
+
+    return color
