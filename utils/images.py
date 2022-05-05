@@ -32,7 +32,7 @@ def is_valid_image(img):
         return True
 
 
-linear_colorspaces = {'Linear', 'Non-color', 'Raw'}
+linear_colorspaces = {'Linear', 'Non-Color', 'Raw'}
 supported_colorspaces = linear_colorspaces | {'sRGB'}
 
 
@@ -74,14 +74,12 @@ def get_pixel_buffer(img, atlas_colorspace='sRGB'):
     img.pixels.foreach_get(buffer)
     # View the buffer in a shape that better represents the data
     buffer.shape = (width, height, channels)
-    # Blender treats the bottom left as (0, 0), but we want the top left to be treated as (0, 0), so view the buffer
-    # with flipped y-axis
-    buffer = buffer[:, ::-1, :]
 
     # Pixels are always read raw, meaning that changing the colorspace of the image has no effect on the pixels,
     # but if we want to combine a linear image into an sRGB image such that the linear image appears the same when
     # viewed in sRGB, we need to convert it to sRGB to linear, so that when it's viewed in sRGB, our initial
     # conversion from sRGB to linear and the conversion from raw (linear) to sRGB when viewed cancel each other out.
+    # FIXME: Conversion isn't working
     img_color_space = img.colorspace_settings.name
     if atlas_colorspace == 'sRGB':
         if img_color_space == 'sRGB':
@@ -115,12 +113,21 @@ def get_resized_pixel_buffer(img, size):
     buffer = get_pixel_buffer(copy)
     # Delete the scaled copy
     bpy.data.images.remove(copy)
+    return buffer
 
 
 def buffer_to_image(buffer, *, name):
     image = bpy.data.images.new(name, buffer.shape[0], buffer.shape[1], alpha=buffer.shape[2] == 4)
     write_pixel_buffer(image, buffer)
     return image
+
+
+def save_generated_image_to_file(image, filepath, file_format=None):
+    # Note that setting image.filepath and/or image.source = 'FILE' can't be done or it will reset the image
+    image.filepath_raw = filepath
+    if file_format:
+        image.file_format = file_format
+    image.save()
 
 
 def write_pixel_buffer(img, buffer):
@@ -133,10 +140,10 @@ def write_pixel_buffer(img, buffer):
         raise RuntimeError("Buffer shape {} does not match image shape {}".format(buffer.shape, image_shape))
 
 
-def new_pixel_buffer(size, color=(0.0, 0.0, 0.0, 1.0)):
+def new_pixel_buffer(size, color=(0.0, 0.0, 0.0, 0.0)):
     """Create a new blank pixel buffer.
     The number of channels is determined based on the fill color.
-    Default fill color is black with alpha.
+    Default fill color is transparent black.
     Compared to how pixels are usually accessed in Blender where (0,0) is the bottom left pixel, pixel buffers have the
     y-axis flipped so that (0,0) is the top left of the image
     :return: a new pixel buffer ndarray
@@ -145,14 +152,18 @@ def new_pixel_buffer(size, color=(0.0, 0.0, 0.0, 1.0)):
     # rgba
     channels = len(color)
     if channels > 4 or channels == 0:
-        raise TypeError("A color can have between 1 and 4 (inclusive) components, but found {}".format(channels))
-    buffer = np.full((width, height, channels), fill_value=color, dtype=np.single)
-    # Blender treats the bottom left as (0, 0), but we want the top left to be treated as (0, 0), so view the buffer
-    # with flipped y-axis
-    return buffer[:, ::-1, :]
+        raise TypeError("A color can have between 1 and 4 (inclusive) components, but found {} in {}".format(channels, color))
+    # TODO: It might be simpler to start with a flat array and then reshape it?
+    # buffer = np.empty(height * width * channels, dtype=np.single)
+    # buffer[:, :] = color
+    buffer = np.full((height, width, channels), fill_value=color, dtype=np.single)
+    return buffer
 
 
-def pixel_buffer_paste(target_buffer, source_buffer_or_pixel, corner_or_box):
+def pixel_buffer_paste(target_buffer, source_buffer_or_pixel, corner_or_box, swap_target_y=False, swap_target_x=False):
+    # box coordinates treat (0,0) as top left, but bottom left is (0,0) in blender, so view the buffer with flipped
+    # y-axis
+    target_buffer = target_buffer[::-1, :, :]
     if isinstance(source_buffer_or_pixel, np.ndarray):
         source_dimensions = len(source_buffer_or_pixel.shape)
         if source_dimensions == 3:
@@ -190,8 +201,23 @@ def pixel_buffer_paste(target_buffer, source_buffer_or_pixel, corner_or_box):
         # Remember that these corners are cartesian coordinates with (0,0) as the top left corner of the image.
         # A box with corners (0,0) and (1,1) only contains the pixels between (0,0) inclusive and (1,1) exclusive
         num_source_channels = len(source_buffer_or_pixel)
-        target_buffer[left:right, upper:lower, :num_source_channels] = source_buffer_or_pixel
+        if swap_target_y:
+            height = target_buffer.shape[1]
+            flipped_lower = height - upper
+            flipped_upper = height - lower
+            lower = flipped_lower
+            upper = flipped_upper
+        if swap_target_x:
+            width = target_buffer.shape[0]
+            flipped_left = width - right
+            flipped_right = width - left
+            left = flipped_left
+            right = flipped_right
+        target_buffer[upper:lower, left:right, :num_source_channels] = source_buffer_or_pixel
     else:
+        # box coordinates treat (0,0) as top left, but bottom left is (0,0) in blender, so view the buffer with flipped
+        # y-axis
+        source_buffer_or_pixel = source_buffer_or_pixel[::-1, :, :]
         # Parse a corner into a box
         if len(corner_or_box) == 2:
             # Only the top left corner to place the source buffer has been set, we will figure out the bottom right
@@ -216,6 +242,19 @@ def pixel_buffer_paste(target_buffer, source_buffer_or_pixel, corner_or_box):
             source_right = source_buffer_or_pixel.shape[0] - right + fit_right
             source_lower = source_buffer_or_pixel.shape[1] - lower + fit_lower
             num_source_channels = source_buffer_or_pixel.shape[2]
-            target_buffer[fit_left:fit_right, fit_upper:fit_lower, :num_source_channels] = source_buffer_or_pixel[source_left:source_right, source_upper:source_lower]
+            print("DEBUG: Pasting into box {} of target from box {} of source".format((fit_left, fit_upper, fit_right, fit_lower), (source_left, source_upper, source_right, source_lower)))
+            if swap_target_y:
+                height = target_buffer.shape[1]
+                flipped_lower = height - fit_upper
+                flipped_upper = height - fit_lower
+                fit_upper = flipped_upper
+                fit_lower = flipped_lower
+            if swap_target_x:
+                width = target_buffer.shape[0]
+                flipped_left = width - fit_right
+                flipped_right = width - fit_left
+                fit_left = flipped_left
+                fit_right = flipped_right
+            target_buffer[fit_upper:fit_lower, fit_left:fit_right, :num_source_channels] = source_buffer_or_pixel[source_upper:source_lower, source_left:source_right]
         else:
             raise TypeError("Pixels in source have more channels than pixels in target, they cannot be pasted")

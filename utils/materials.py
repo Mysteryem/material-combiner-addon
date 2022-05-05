@@ -80,10 +80,6 @@ def to_255_scale(c):
     return max(min(int(c * 255 + 0.5), 255), 0)
 
 
-def rgb_to_srgb(diffuse):
-    return tuple(map(scene_linear_to_srgb, diffuse))
-
-
 # TODO: If we were to want to create an atlas for a data texture such as roughness, the colors should be left as linear
 def get_diffuse(mat, convert_to_255_scale=True, linear=False):
     """Returns the diffuse RGB from a material,"""
@@ -114,7 +110,7 @@ def get_diffuse(mat, convert_to_255_scale=True, linear=False):
     # Shader node colors are linear
     convert_to_srgb = not linear
     if convert_to_srgb:
-        color = map(rgb_to_srgb, color)
+        color = map(scene_linear_to_srgb, color)
     # We may want the colors in a 0-255 scale
     if convert_to_255_scale:
         color = tuple(map(to_255_scale, color))

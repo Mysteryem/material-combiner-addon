@@ -16,7 +16,7 @@ from ...utils.materials import get_diffuse
 from ...utils.materials import sort_materials
 from ...utils.textures import get_texture
 from ...utils.images import get_image, get_image_path, new_pixel_buffer, pixel_buffer_paste, get_pixel_buffer,\
-    get_resized_pixel_buffer, buffer_to_image
+    get_resized_pixel_buffer, buffer_to_image, save_generated_image_to_file
 
 
 def set_ob_mode(scn):
@@ -126,14 +126,16 @@ def get_size(scn, data):
                 img = mat.node_tree.nodes['Image Texture'].image
         else:
             img = get_image(get_texture(mat))
-        # TODO: Remove the path checks, we should be able to handle any image, not just those with a file
-        path = get_image_path(img)
         max_x = max(max([uv.x for uv in i['uv'] if not math.isnan(uv.x)], default=1), 1)
         max_y = max(max([uv.y for uv in i['uv'] if not math.isnan(uv.y)], default=1), 1)
         i['gfx']['uv_size'] = (max_x if max_x < 25 else 1, max_y if max_y < 25 else 1)
         if not scn.smc_crop:
+            # FIXME: UVs are off by half a pixel. To reproduce, atlas a quad with uvs (0,0), (0,1), (1,0), (1,1).
+            #        The corners of the quad's UVs will all be half a pixel towards the middle of the quad
+            # FIXME: UVs do not get scale properly when images in the atlas have to be made much smaller?
+            #        Maybe something to do with resizing the atlas at the end?
             i['gfx']['uv_size'] = tuple(map(math.ceil, i['gfx']['uv_size']))
-        if path:
+        if img is not None:
             if mat.smc_size:
                 img_size = (min(mat.smc_size_width, img.size[0]),
                             min(mat.smc_size_height, img.size[1]))
@@ -182,9 +184,25 @@ def get_gfx(scn, mat, item, src):
                 img_buffer[:, :, :len(diffuse_color)] *= diffuse_color
         else:
             # TODO: We can optimise this by passing in the colour directly
-            img_buffer = new_pixel_buffer(size, get_diffuse(mat, convert_to_255_scale=False))
+            img_buffer = new_pixel_buffer(size, get_diffuse(mat, convert_to_255_scale=False) + (1.0,))
     else:
         # src must be a color in a tuple/list of components
+        # TODO: We can probably safely reject anything that isn't RGB or RGBA
+        num_components = len(src)
+        if num_components == 3:
+            # Typical RGB only, we will assume alpha should be 1.0
+            src = src + (1.0,)
+        elif num_components == 2:
+            # Weird to be passing in only RG, I guess we can leave the last component as 0.0
+            src = src + (0.0, 1.0)
+        elif num_components == 1:
+            # R only, we could either spread the single component out into RGB or set G and B to 0.0.
+            # Alpha will be treated as 1.0.
+            # Expand single component to RGB
+            # TODO: Maybe convert luminance to greyscale instead?
+            src = src + (src[0], src[0], 1.0)
+        elif num_components != 4:
+            raise TypeError("Invalid colour '{}', must be tuple-like with at most 4 (RGBA) elements.".format(src))
         img_buffer = new_pixel_buffer(size, src)
     return img_buffer
 
@@ -202,6 +220,13 @@ def get_atlas(scn, data, size):
                 item['gfx']['img'] = mat.node_tree.nodes['mmd_base_tex'].image
             elif shader == 'vrm' or shader == 'xnalara' or shader == 'diffuse' or shader == 'emission':
                 item['gfx']['img'] = mat.node_tree.nodes['Image Texture'].image
+            else:
+                if mat:
+                    item['gfx']['img'] = get_diffuse(mat, convert_to_255_scale=False, linear=True)
+                    print("DEBUG: Unrecognised shader for {}. Got diffuse colour instead".format(mat))
+                else:
+                    item['gfx']['img'] = [0.0, 0.0, 0.0, 1.0]
+                    print("DEBUG: No material, so used Black color")
         else:
             item['gfx']['img'] = get_image(get_texture(mat))
     img = new_pixel_buffer(size)
@@ -213,6 +238,7 @@ def get_atlas(scn, data, size):
                                               i['gfx']['fit']['y'] + int(scn.smc_gaps / 2)))
     atlas = buffer_to_image(img, name='temp_material_combine_atlas')
     if scn.smc_size == 'CUST':
+        # FIXME Maybe broken?
         atlas.scale(scn.smc_size_width, scn.smc_size_height)
     return atlas
 
@@ -235,11 +261,8 @@ def get_comb_mats(scn, atlas, mats_uv):
     unique_id = random.choice([i for i in range(10000, 99999) if i not in existed_ids])
     atlas_name = 'Atlas_{0}.png'.format(unique_id)
     path = os.path.join(scn.smc_save_path, atlas_name)
-    # TODO: Should be able to create the image earlier and only rename and save it here
     atlas.name = atlas_name
-    atlas.source = 'FILE'
-    atlas.filepath = path
-    atlas.save()
+    save_generated_image_to_file(atlas, path, 'PNG')
     texture = bpy.data.textures.new('texture_atlas_{0}'.format(unique_id), 'IMAGE')
     texture.image = atlas
     mats = {}
