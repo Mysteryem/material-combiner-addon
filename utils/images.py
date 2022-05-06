@@ -73,7 +73,7 @@ def get_pixel_buffer(img, atlas_colorspace='sRGB'):
     # Buffer must be flat when reading
     img.pixels.foreach_get(buffer)
     # View the buffer in a shape that better represents the data
-    buffer.shape = (width, height, channels)
+    buffer.shape = (height, width, channels)
 
     # Pixels are always read raw, meaning that changing the colorspace of the image has no effect on the pixels,
     # but if we want to combine a linear image into an sRGB image such that the linear image appears the same when
