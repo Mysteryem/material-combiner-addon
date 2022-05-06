@@ -15,8 +15,9 @@ from ...utils.materials import shader_type
 from ...utils.materials import get_diffuse
 from ...utils.materials import sort_materials
 from ...utils.textures import get_texture
-from ...utils.images import get_image, get_image_path, new_pixel_buffer, pixel_buffer_paste, get_pixel_buffer,\
-    get_resized_pixel_buffer, buffer_to_image, save_generated_image_to_file
+from ...utils.images import get_image_path, save_generated_image_to_file
+from ...utils.pixel_buffer import get_pixel_buffer, get_resized_pixel_buffer, buffer_to_image, new_pixel_buffer,\
+    pixel_buffer_paste
 from ...utils.textures import get_image
 
 
