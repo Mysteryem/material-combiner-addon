@@ -2,9 +2,8 @@ import math
 from collections import defaultdict
 
 import bpy
-from .images import get_image
 from .images import get_image_path
-from .textures import get_texture
+from .textures import get_texture, get_image
 from .. import globs
 
 

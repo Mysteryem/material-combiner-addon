@@ -17,6 +17,7 @@ from ...utils.materials import sort_materials
 from ...utils.textures import get_texture
 from ...utils.images import get_image, get_image_path, new_pixel_buffer, pixel_buffer_paste, get_pixel_buffer,\
     get_resized_pixel_buffer, buffer_to_image, save_generated_image_to_file
+from ...utils.textures import get_image
 
 
 def set_ob_mode(scn):
