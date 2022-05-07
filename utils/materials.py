@@ -2,7 +2,7 @@ import math
 from collections import defaultdict
 
 import bpy
-from .images import is_image_valid
+from .images import is_image_valid, is_single_colour_generated
 from .textures import get_texture, get_image
 from .. import globs
 
@@ -63,9 +63,13 @@ def sort_materials(mat_list):
             image = get_image(get_texture(mat))
         if image:
             if is_image_valid(image):
-                # TODO: It would be useful to differentiate between no image and an invalid image, that way, the user
-                #       could be told that an image is invalid, why, and how to fix it if there is a clear fix.
-                mat_dict[(image.name, get_diffuse(mat) if mat.smc_diffuse else None)].append(mat)
+                if is_single_colour_generated(image):
+                    # Generated images that are a single color can be treated as if
+                    mat_dict[tuple(image.generated_color)].append(mat)
+                else:
+                    # TODO: It would be useful to differentiate between no image and an invalid image, that way, the user
+                    #       could be told that an image is invalid, why, and how to fix it if there is a clear fix.
+                    mat_dict[(image.name, get_diffuse(mat) if mat.smc_diffuse else None)].append(mat)
         else:
             # Material either has no image or the image is not considered valid
             mat_dict[get_diffuse(mat)].append(mat)
