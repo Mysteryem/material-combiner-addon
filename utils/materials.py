@@ -2,7 +2,7 @@ import math
 from collections import defaultdict
 
 import bpy
-from .images import get_image_path
+from .images import is_image_valid
 from .textures import get_texture, get_image
 from .. import globs
 
@@ -52,17 +52,22 @@ def sort_materials(mat_list):
     mat_dict = defaultdict(list)
     for mat in mat_list:
         if globs.version > 0:
-            path = None
             shader = shader_type(mat) if mat else False
             if shader == 'mmd':
-                path = get_image_path(mat.node_tree.nodes['mmd_base_tex'].image)
+                image = mat.node_tree.nodes['mmd_base_tex'].image
             elif shader == 'vrm' or shader == 'xnalara' or shader == 'diffuse' or shader == 'emission':
-                path = get_image_path(mat.node_tree.nodes['Image Texture'].image)
+                image = mat.node_tree.nodes['Image Texture'].image
+            else:
+                image = None
         else:
-            path = get_image_path(get_image(get_texture(mat)))
-        if path:
-            mat_dict[(path, get_diffuse(mat) if mat.smc_diffuse else None)].append(mat)
+            image = get_image(get_texture(mat))
+        if image:
+            if is_image_valid(image):
+                # TODO: It would be useful to differentiate between no image and an invalid image, that way, the user
+                #       could be told that an image is invalid, why, and how to fix it if there is a clear fix.
+                mat_dict[(image.name, get_diffuse(mat) if mat.smc_diffuse else None)].append(mat)
         else:
+            # Material either has no image or the image is not considered valid
             mat_dict[get_diffuse(mat)].append(mat)
     return mat_dict
 

@@ -15,7 +15,7 @@ from ...utils.materials import shader_type
 from ...utils.materials import get_diffuse
 from ...utils.materials import sort_materials
 from ...utils.textures import get_texture
-from ...utils.images import get_image_path, save_generated_image_to_file
+from ...utils.images import save_generated_image_to_file, is_image_valid
 from ...utils.pixel_buffer import get_pixel_buffer, get_resized_pixel_buffer, buffer_to_image, new_pixel_buffer,\
     pixel_buffer_paste
 from ...utils.textures import get_image
@@ -137,7 +137,7 @@ def get_size(scn, data):
             # FIXME: UVs do not get scale properly when images in the atlas have to be made much smaller?
             #        Maybe something to do with resizing the atlas at the end?
             i['gfx']['uv_size'] = tuple(map(math.ceil, i['gfx']['uv_size']))
-        if img is not None:
+        if is_image_valid(img):
             if mat.smc_size:
                 img_size = (min(mat.smc_size_width, img.size[0]),
                             min(mat.smc_size_height, img.size[1]))
@@ -224,6 +224,7 @@ def get_atlas(scn, data, size):
                 item['gfx']['img'] = mat.node_tree.nodes['Image Texture'].image
             else:
                 if mat:
+                    # Pixels are normalized and read in linear, so the diffuse colors must be read as linear too
                     item['gfx']['img'] = get_diffuse(mat, convert_to_255_scale=False, linear=True)
                     print("DEBUG: Unrecognised shader for {}. Got diffuse colour instead".format(mat))
                 else:
@@ -241,6 +242,8 @@ def get_atlas(scn, data, size):
     atlas = buffer_to_image(img, name='temp_material_combine_atlas')
     if scn.smc_size == 'CUST':
         # FIXME Maybe broken?
+        #  Of note, much better results would be achieved from resizing images first to match the desired packed shape
+        #  as the edges of textures would not blur together
         atlas.scale(scn.smc_size_width, scn.smc_size_height)
     return atlas
 
