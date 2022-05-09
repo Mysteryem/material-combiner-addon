@@ -175,7 +175,9 @@ def get_gfx(scn, mat, item, src):
                 img_buffer = get_resized_pixel_buffer(src, size)
             else:
                 img_buffer = get_pixel_buffer(src)
-            if any(item['gfx']['uv_size']) > 0.999:
+            max_uv = item['gfx']['uv_size']
+            # Note that get_size(...) sets uv_size to always be at least 1
+            if max_uv[0] > 1 or max_uv[1] > 1:
                 img_buffer = get_uv_image(item, img_buffer, size)
             if mat.smc_diffuse:
                 # TODO: This diffuse_img was in sRGB, surely this needs to be linear?
