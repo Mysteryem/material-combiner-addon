@@ -1,11 +1,120 @@
 import numpy as np
+import array
 
 import bpy
 
-# Type has to match the internal type used by Blender otherwise the internal data is iterated in a for loop, casting
-# every element to the mismatched type, which is much slower than getting the internal data directly when the type
-# matches the internal type (though still much faster than iterating through each pixel in Python).
+# Image.pixels is a bpy_prop_array, to use its foreach_get/foreach_set methods with buffers, the buffer's type has to
+# match the internal C type used by Blender, otherwise Blender will reject the buffer.
+#
+# Note that this is different to the behaviour of the foreach_get and foreach_set methods on bpy_prop_collection objects
+# which allow for the type to be different by casting every value to the new type (which you generally want to avoid
+# anyway because it slows things down)
+# Single precision float dtype for use with numpy functions
 pixel_dtype = np.single
+# The C type code for single precision float, for use with Python arrays
+pixel_ctype = 'f'
+
+
+if bpy.version >= (2, 83):  # bpy_prop_array.foreach_get was added in Blender 2.83
+    # 1.5988599996489938ms for 1024x1024
+    # 15.224460000172257ms for 2048x2048
+    # 60.937399999966146 for 4096x4096
+    # 306.261860000086ms for 8192x8192
+    def __get_buffer_internal(image):
+        pixels = image.pixels
+        buffer = np.empty(len(pixels), dtype=pixel_dtype)
+        # Buffer must be flat when reading
+        pixels.foreach_get(buffer)
+        return buffer
+elif bpy.version >= (2, 80):  # Being able to use the memory of an existing buffer in bgl.Buffer was added in Blender 2.80, not that this behaviour is documented
+    import bgl
+    pixel_gltype = bgl.GL_FLOAT
+    # 16.717200000130106ms for 1024x1024
+    # 65.88486666684427 for 2048x2048
+    # 293.88186666740995 for 4096x4096
+    # 1121.5862666661753ms for 8192x8192
+
+    # see https://blender.stackexchange.com/a/230242 for details
+    def __get_buffer_internal(image):
+        # TODO: Check that transparency doesn't premultiply even if the image is set to premultiply, we want the raw
+        #  pixels!
+        # FIXME: It seems that if you resize the image (through scale) and don't save it, glGetTexImage still thinks
+        #  the image is the old size. Maybe if image.is_dirty, we first do image.gl_free()? Mabye that will clean it up.
+        pixels = image.pixels
+        # Load the image into OpenGL and use that to get the pixels in a more performant manner
+        # As per the documentation, the colours will be read in scene linear color space and have premultiplied or
+        # straight alpha matching the image alpha mode.
+        # TODO: Temporarily set alpha mode to STRAIGHT if image is set to PREMULTIPLY?
+        # see https://blender.stackexchange.com/a/230242 for details
+        # Open GL will cache the image if we've used it previously, this means that if we update the image in Blender
+        # it won't have updated in Open GL unless we free it first. There isn't really a way to know if the image has
+        # changed since it was last cached, so we'll free it
+        if image.bindcode:
+            # If the open gl bindcode is set, then it's already been cached, so free it from open gl first
+            image.gl_free()
+        if image.gl_load():
+            raise Exception()
+        bgl.glActiveTexture(bgl.GL_TEXTURE0)
+        bgl.glBindTexture(bgl.GL_TEXTURE_2D, image.bindcode)
+        buffer = np.empty(len(pixels), dtype=pixel_dtype)
+        gl_buffer = bgl.Buffer(bgl.GL_FLOAT, buffer.shape, buffer)
+        bgl.glGetTexImage(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, bgl.GL_FLOAT, gl_buffer)
+        return buffer
+else:
+    # TODO: Look into how feasible it would be to draw the images to one large atlas canvas in Open GL,
+    #  avoiding image.pixels entirely (until needing to save the atlas to a file)
+    import bgl
+    pixel_gltype = bgl.GL_FLOAT
+
+    # On Blender 2.79:
+    # 159.61713333338898ms for 1024x1024
+    # 636.5121333334779ms for 2048x2048
+    # 2600.715000000188ms for 4096x4096
+    # 10215.13573333353ms for 8192x8192
+    #
+    # Compared to simply "return np.fromiter(pixels, dtype=pixel_dtype)"
+    # 200.29373333333447ms for 1024x1024
+    # 819.820066666883ms for 2048x2048
+    # 3343.7631999998607 for 4096x4096
+    # 33066.21610000002 for 8192x8192
+    def __get_buffer_internal(image):
+        pixels = image.pixels
+        if image.bindcode[0]:
+            image.gl_free()
+        if image.gl_load(0, bgl.GL_NEAREST, bgl.GL_NEAREST):
+            raise Exception()
+        num_pixel_components = len(pixels)
+        bgl.glEnable(bgl.GL_TEXTURE_2D)
+        bgl.glActiveTexture(bgl.GL_TEXTURE0)
+        bgl.glBindTexture(bgl.GL_TEXTURE_2D, image.bindcode[0])
+        gl_buffer = bgl.Buffer(pixel_gltype, num_pixel_components)
+        bgl.glGetTexImage(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, pixel_gltype, gl_buffer)
+        return np.fromiter(gl_buffer, pixel_dtype)
+
+if bpy.app.version >= (2, 83):
+    def __write_pixel_buffer_internal(img, buffer):
+        img.pixels.foreach_set(buffer)
+else:
+    def __write_pixel_buffer_internal(img, buffer):
+        # Added in Blender 2.83, here for reference
+        # 7.610340000246652ms for 1024x1024
+        # 114.70884000009392ms for 4096x4096
+        # img.pixels.foreach_set(buffer)
+        #
+        # From a thread I found discussing the performance of Image.pixels, this was considered the fastest method
+        # 110.55637000099523ms for 1024x1024
+        # 1991.7785500001628ms for 4096x4096
+        # img.pixels[:] = buffer.tolist()
+        #
+        # In most cases, it's faster to set the value of each element instead of replacing the entire pixels attribute,
+        # but that doesn't seem to be the case for Python arrays for some reason.
+        # I would have thought that maybe this was to do with Python arrays implementing the buffer protocol,
+        # but then img.pixels = buffer.data (a MemoryView object, which also implements the buffer protocol) should also
+        # be faster, but it's not.
+        # buffer.tobytes() seems to be the fastest way to get an ndarray into a Python array
+        # 85.54007000057026ms for 1024x1024
+        # 1511.0748700011754ms for 4096x4096
+        img.pixels = array.array(pixel_ctype, buffer.tobytes())
 
 linear_colorspaces = {'Linear', 'Non-Color', 'Raw'}
 supported_colorspaces = linear_colorspaces | {'sRGB'}
@@ -44,9 +153,7 @@ def buffer_convert_srgb_to_linear(buffer):
 def get_pixel_buffer(img, atlas_colorspace='sRGB'):
     width, height = img.size
     channels = img.channels
-    buffer = np.empty(width * height * channels, dtype=pixel_dtype)
-    # Buffer must be flat when reading
-    img.pixels.foreach_get(buffer)
+    buffer = __get_buffer_internal(img)
     # View the buffer in a shape that better represents the data
     buffer.shape = (height, width, channels)
 
@@ -102,7 +209,7 @@ def write_pixel_buffer(img, buffer):
     image_shape = (width, height, img.channels)
     if buffer.shape == image_shape:
         # buffer must be flattened when writing
-        img.pixels.foreach_set(buffer.ravel())
+        __write_pixel_buffer_internal(img, buffer.ravel())
     else:
         raise RuntimeError("Buffer shape {} does not match image shape {}".format(buffer.shape, image_shape))
 
