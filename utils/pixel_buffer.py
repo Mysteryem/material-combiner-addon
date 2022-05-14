@@ -58,13 +58,34 @@ elif bpy.app.version >= (2, 80):  # Being able to use the memory of an existing 
         gl_buffer = bgl.Buffer(bgl.GL_FLOAT, buffer.shape, buffer)
         bgl.glGetTexImage(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, bgl.GL_FLOAT, gl_buffer)
         return buffer
-else:
+else:  # Oldest theoretically supported Blender version is 2.50, because that's when the bgl module was added
     # TODO: Look into how feasible it would be to draw the images to one large atlas canvas in Open GL,
     #  avoiding image.pixels entirely (until needing to save the atlas to a file)
     import bgl
     pixel_gltype = bgl.GL_FLOAT
 
+    try:
+        from .ctypes_buffer_utils import np_array_from_bgl_buffer
+
+        def __2_79_bgl_buffer_to_np(buffer):
+            return np_array_from_bgl_buffer(buffer)
+    except AssertionError:
+        print("Failed to import ctypes_buffer_utils, resorting to slower iteration to get image pixels")
+        def __2_79_bgl_buffer_to_np(buffer):
+            return np.fromiter(buffer, dtype=pixel_dtype)
+
     # On Blender 2.79:
+    # Getting pixels through Open GL and then into a numpy array via np_array_from_bgl_buffer (no copy)
+    # 10.043833333333769ms for 1024x1024
+    # Other sizes not tested due to current garbage collection issues
+    #
+    # Getting pixels through Open GL and then into a numpy array via np_array_from_bgl_buffer (with copy)
+    # 19.03783333333327ms for 1024x1024
+    # 71.54451000000108 for 2048x2048
+    # 284.82934999999543 for 4096x4096
+    # 1079.8510299999975 for 8192x8192
+    #
+    # Getting pixels through Open GL and then into a numpy array via np.fromiter(buffer, dtype=pixel_dtype)
     # 159.61713333338898ms for 1024x1024
     # 636.5121333334779ms for 2048x2048
     # 2600.715000000188ms for 4096x4096
@@ -87,7 +108,7 @@ else:
         bgl.glBindTexture(bgl.GL_TEXTURE_2D, image.bindcode[0])
         gl_buffer = bgl.Buffer(pixel_gltype, num_pixel_components)
         bgl.glGetTexImage(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, pixel_gltype, gl_buffer)
-        return np.fromiter(gl_buffer, pixel_dtype)
+        return __2_79_bgl_buffer_to_np(gl_buffer)
 
 if bpy.app.version >= (2, 83):
     def __write_pixel_buffer_internal(img, buffer):
@@ -112,6 +133,8 @@ else:
         # buffer.tobytes() seems to be the fastest way to get an ndarray into a Python array
         # 85.54007000057026ms for 1024x1024
         # 1511.0748700011754ms for 4096x4096
+        # TODO: If we can know that large areas of the atlas remain the generated colour of the image, maybe we could
+        #  skip setting the pixels in those areas for a potential speed up
         img.pixels = array.array(pixel_ctype, buffer.tobytes())
 
 linear_colorspaces = {'Linear', 'Non-Color', 'Raw'}
