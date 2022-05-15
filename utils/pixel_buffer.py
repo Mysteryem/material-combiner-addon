@@ -16,10 +16,10 @@ pixel_ctype = 'f'
 
 
 if bpy.app.version >= (2, 83):  # bpy_prop_array.foreach_get was added in Blender 2.83
-    # 1.5988599996489938ms for 1024x1024
-    # 15.224460000172257ms for 2048x2048
-    # 60.937399999966146 for 4096x4096
-    # 306.261860000086ms for 8192x8192
+    # 1.6ms for 1024x1024
+    # 15.2ms for 2048x2048
+    # 60.9ms for 4096x4096
+    # 306.2ms for 8192x8192
     def __get_buffer_internal(image):
         pixels = image.pixels
         buffer = np.empty(len(pixels), dtype=pixel_dtype)
@@ -29,10 +29,10 @@ if bpy.app.version >= (2, 83):  # bpy_prop_array.foreach_get was added in Blende
 elif bpy.app.version >= (2, 80):  # Being able to use the memory of an existing buffer in bgl.Buffer was added in Blender 2.80, not that this behaviour is documented
     import bgl
     pixel_gltype = bgl.GL_FLOAT
-    # 16.717200000130106ms for 1024x1024
-    # 65.88486666684427 for 2048x2048
-    # 293.88186666740995 for 4096x4096
-    # 1121.5862666661753ms for 8192x8192
+    # 16.7ms for 1024x1024
+    # 65.9ms for 2048x2048
+    # 293.9ms for 4096x4096
+    # 1121.6ms for 8192x8192
 
     # see https://blender.stackexchange.com/a/230242 for details
     def __get_buffer_internal(image):
@@ -51,7 +51,8 @@ elif bpy.app.version >= (2, 80):  # Being able to use the memory of an existing 
             # If the open gl bindcode is set, then it's already been cached, so free it from open gl first
             image.gl_free()
         if image.gl_load():
-            raise Exception()
+            print("Could not load {} into Open GL, resorting to a slower method of getting pixels".format(image))
+            return np.fromiter(pixels, dtype=pixel_dtype)
         bgl.glActiveTexture(bgl.GL_TEXTURE0)
         bgl.glBindTexture(bgl.GL_TEXTURE_2D, image.bindcode)
         buffer = np.empty(len(pixels), dtype=pixel_dtype)
@@ -65,50 +66,48 @@ else:  # Oldest theoretically supported Blender version is 2.50, because that's 
     pixel_gltype = bgl.GL_FLOAT
 
     try:
-        from .ctypes_buffer_utils import np_array_from_bgl_buffer
+        from .ctypes_buffer_utils import gl_get_tex_image_to_numpy
 
-        def __2_79_bgl_buffer_to_np(buffer):
-            return np_array_from_bgl_buffer(buffer)
+        def __2_79_gl_tex_to_np(num_pixel_components):
+            return gl_get_tex_image_to_numpy(num_pixel_components, pixel_gltype, pixel_dtype)
     except AssertionError:
-        print("Failed to import ctypes_buffer_utils, resorting to slower iteration to get image pixels")
-        def __2_79_bgl_buffer_to_np(buffer):
-            return np.fromiter(buffer, dtype=pixel_dtype)
+        print("Failed to import ctypes_buffer_utils, resorting to using much slower iteration to get image pixels from Open GL")
+
+        def __2_79_gl_tex_to_np(num_pixel_components):
+            gl_buffer = bgl.Buffer(pixel_gltype, num_pixel_components)
+            bgl.glGetTexImage(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, pixel_gltype, gl_buffer)
+            return np.fromiter(gl_buffer, dtype=pixel_dtype)
 
     # On Blender 2.79:
-    # Getting pixels through Open GL and then into a numpy array via np_array_from_bgl_buffer (no copy)
-    # 10.043833333333769ms for 1024x1024
-    # Other sizes not tested due to current garbage collection issues
-    #
-    # Getting pixels through Open GL and then into a numpy array via np_array_from_bgl_buffer (with copy)
-    # 19.03783333333327ms for 1024x1024
-    # 71.54451000000108 for 2048x2048
-    # 284.82934999999543 for 4096x4096
-    # 1079.8510299999975 for 8192x8192
+    # Getting pixels through Open GL and then into a numpy array via gl_get_tex_image_to_numpy
+    # 9.7ms for 1024x1024
+    # 52.7ms for 2048x2048
+    # 201.8ms for 4096x4096
+    # 818.8ms for 8192x8192
     #
     # Getting pixels through Open GL and then into a numpy array via np.fromiter(buffer, dtype=pixel_dtype)
-    # 159.61713333338898ms for 1024x1024
-    # 636.5121333334779ms for 2048x2048
-    # 2600.715000000188ms for 4096x4096
-    # 10215.13573333353ms for 8192x8192
+    # 159.6ms for 1024x1024
+    # 636.5ms for 2048x2048
+    # 2600.7ms for 4096x4096
+    # 10215.1ms for 8192x8192
     #
     # Compared to simply "return np.fromiter(pixels, dtype=pixel_dtype)"
-    # 200.29373333333447ms for 1024x1024
-    # 819.820066666883ms for 2048x2048
-    # 3343.7631999998607 for 4096x4096
-    # 33066.21610000002 for 8192x8192
+    # 200.3ms for 1024x1024
+    # 819.8ms for 2048x2048
+    # 3343.8 for 4096x4096
+    # 33066.2 for 8192x8192
     def __get_buffer_internal(image):
         pixels = image.pixels
         if image.bindcode[0]:
             image.gl_free()
         if image.gl_load(0, bgl.GL_NEAREST, bgl.GL_NEAREST):
-            raise Exception()
+            print("Could not load {} into Open GL, resorting to a slower method of getting pixels".format(image))
+            return np.fromiter(pixels, dtype=pixel_dtype)
         num_pixel_components = len(pixels)
         bgl.glEnable(bgl.GL_TEXTURE_2D)
         bgl.glActiveTexture(bgl.GL_TEXTURE0)
         bgl.glBindTexture(bgl.GL_TEXTURE_2D, image.bindcode[0])
-        gl_buffer = bgl.Buffer(pixel_gltype, num_pixel_components)
-        bgl.glGetTexImage(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, pixel_gltype, gl_buffer)
-        return __2_79_bgl_buffer_to_np(gl_buffer)
+        return __2_79_gl_tex_to_np(num_pixel_components)
 
 if bpy.app.version >= (2, 83):
     def __write_pixel_buffer_internal(img, buffer):
