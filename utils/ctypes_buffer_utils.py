@@ -72,21 +72,22 @@ def gl_get_tex_image_to_numpy(num_pixel_components, pixel_gltype, pixel_dtype):
     old_dimensions0 = c_buffer.dimensions[0]
     old_buf = c_buffer.buf
 
-    # Set the fields to those used by the ndarray
-    # ndimensions should already be 1, so this shouldn't change anything
-    c_buffer.ndimensions = 1  # numpy array is flat, so only 1 dimension
-    # 0th dimension length is the entire length of the numpy array
-    c_buffer.dimensions[0] = num_pixel_components
-    c_buffer.buf = np_array.ctypes.data
+    try:
+        # Set the fields to those used by the ndarray
+        # ndimensions should already be 1, so this shouldn't change anything
+        c_buffer.ndimensions = 1  # numpy array is flat, so only 1 dimension
+        # 0th dimension length is the entire length of the numpy array
+        c_buffer.dimensions[0] = num_pixel_components
+        c_buffer.buf = np_array.ctypes.data
 
-    # Copy pixels into the gl_buffer, which we've set up to share the same memory as the ndarray, meaning that the
-    # pixels get put into the ndarray
-    bgl.glGetTexImage(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, pixel_gltype, gl_buffer)
-
-    # Set the fields back to the old values
-    c_buffer.buf = old_buf
-    c_buffer.dimensions[0] = old_dimensions0
-    c_buffer.ndimensions = old_ndimensions
+        # Copy pixels into the gl_buffer, which we've set up to share the same memory as the ndarray, meaning that the
+        # pixels get put into the ndarray
+        bgl.glGetTexImage(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, pixel_gltype, gl_buffer)
+    finally:
+        # ALWAYS set the fields back to the old values to avoid memory leaks/corruption
+        c_buffer.buf = old_buf
+        c_buffer.dimensions[0] = old_dimensions0
+        c_buffer.ndimensions = old_ndimensions
 
     # The image pixels are now in the ndarray
     return np_array
