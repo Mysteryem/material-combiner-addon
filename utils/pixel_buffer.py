@@ -3,6 +3,9 @@ import array
 
 import bpy
 
+# A 'pixel buffer' is a single precision float type numpy array, viewed in the shape
+# (image.height, image.width, image.channels)
+
 # Image.pixels is a bpy_prop_array, to use its foreach_get/foreach_set methods with buffers, the buffer's type has to
 # match the internal C type used by Blender, otherwise Blender will reject the buffer.
 #
@@ -112,16 +115,38 @@ else:  # Oldest theoretically supported Blender version is 2.50, because that's 
 if bpy.app.version >= (2, 83):
     def __write_pixel_buffer_internal(img, buffer):
         img.pixels.foreach_set(buffer)
+elif bpy.app.version >= (2, 80):
+    try:
+        from .ctypes_imbuf_utils import numpy_pixels_to_image
+
+        # Note that, as this writes a file to disk and then loads that file as an Image, the timing will also vary with
+        # disk speed/activity instead of only cpu speed/activity. These times were recorded with an SSD.
+        # For images smaller than about 128x128, this may actually be slower, but at that point, the performance
+        # difference between the different methods is pretty much negligible (less than 1ms).
+        # These times are recorded with write_to_image_filepath=False because that includes the time that Blender takes
+        # to load the updated image.pixels, which are otherwise lazy loaded.
+        # 58.2ms for 1024x1024
+        # 201.3ms for 2048x2048
+        # 740.1ms for 4096x4096
+        # 2810.9ms for 8192x8192
+        def __write_pixel_buffer_internal(img, buffer):
+            numpy_pixels_to_image(img, buffer, write_to_image_filepath=False)
+
+    except AssertionError:
+        print("Failed to import ctypes_imbuf_utils, resorting to using much slower iteration to set image pixels")
+
+        def __write_pixel_buffer_internal(img, buffer):
+            img.pixels = array.array(pixel_ctype, buffer.tobytes())
 else:
     def __write_pixel_buffer_internal(img, buffer):
         # Added in Blender 2.83, here for reference
-        # 7.610340000246652ms for 1024x1024
-        # 114.70884000009392ms for 4096x4096
+        # 7.6ms for 1024x1024
+        # 114.7ms for 4096x4096
         # img.pixels.foreach_set(buffer)
         #
         # From a thread I found discussing the performance of Image.pixels, this was considered the fastest method
-        # 110.55637000099523ms for 1024x1024
-        # 1991.7785500001628ms for 4096x4096
+        # 110.6ms for 1024x1024
+        # 1991.8ms for 4096x4096
         # img.pixels[:] = buffer.tolist()
         #
         # In most cases, it's faster to set the value of each element instead of replacing the entire pixels attribute,
@@ -130,8 +155,10 @@ else:
         # but then img.pixels = buffer.data (a MemoryView object, which also implements the buffer protocol) should also
         # be faster, but it's not.
         # buffer.tobytes() seems to be the fastest way to get an ndarray into a Python array
-        # 85.54007000057026ms for 1024x1024
-        # 1511.0748700011754ms for 4096x4096
+        # 85.5ms for 1024x1024
+        # 388.2 for 2048x2048
+        # 1511.1ms for 4096x4096
+        # 6407.5ms for 8192x8192
         # TODO: If we can know that large areas of the atlas remain the generated colour of the image, maybe we could
         #  skip setting the pixels in those areas for a potential speed up
         img.pixels = array.array(pixel_ctype, buffer.tobytes())
