@@ -70,7 +70,8 @@ def gl_get_tex_image_to_numpy(num_pixel_components, pixel_gltype, pixel_dtype):
     old_ndimensions = c_buffer.ndimensions
     # It seems to work even if we don't change the 0th dimension size, but it's probably a good idea to set it correctly
     old_dimensions0 = c_buffer.dimensions[0]
-    old_buf = c_buffer.buf
+    # c_void_p is directly accessed as a memory address
+    old_buf_address = c_buffer.buf
 
     try:
         # Set the fields to those used by the ndarray
@@ -85,7 +86,7 @@ def gl_get_tex_image_to_numpy(num_pixel_components, pixel_gltype, pixel_dtype):
         bgl.glGetTexImage(bgl.GL_TEXTURE_2D, 0, bgl.GL_RGBA, pixel_gltype, gl_buffer)
     finally:
         # ALWAYS set the fields back to the old values to avoid memory leaks/corruption
-        c_buffer.buf = old_buf
+        c_buffer.buf = old_buf_address
         c_buffer.dimensions[0] = old_dimensions0
         c_buffer.ndimensions = old_ndimensions
 
