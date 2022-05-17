@@ -151,7 +151,12 @@ def numpy_pixels_to_file(pixel_buffer: np.ndarray, filepath):
     if pixel_buffer.dtype != np.ubyte:
         if pixel_buffer.dtype == np.single:
             # Convert to unsigned char (unsigned byte)
-            pixel_buffer_ubyte = (pixel_buffer * 255).astype(np.ubyte)
+            # This is the same conversion Blender uses internally, as defined in unit_float_to_uchar_clamp in
+            # math_base_inline.c, albeit vectorized for numpy
+            condition_list = [pixel_buffer <= np.single(0.0), pixel_buffer > (np.single(1.0) - np.single(0.5) / np.single(255.0))]
+            choice_list = [np.single(0.0), np.single(255.0)]
+            default_value = np.single(255.0) * pixel_buffer + np.single(0.5)
+            pixel_buffer_ubyte = np.select(condition_list, choice_list, default=default_value).astype(np.ubyte)
         else:
             raise TypeError("Invalid pixel_buffer dtype: {}".format(pixel_buffer.dtype))
     else:
