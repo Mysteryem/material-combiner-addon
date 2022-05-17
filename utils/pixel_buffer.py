@@ -251,7 +251,7 @@ def buffer_to_image(buffer, *, name):
 
 def write_pixel_buffer(img, buffer):
     width, height = img.size
-    image_shape = (width, height, img.channels)
+    image_shape = (height, width, img.channels)
     if buffer.shape == image_shape:
         # buffer must be flattened when writing
         __write_pixel_buffer_internal(img, buffer.ravel())
