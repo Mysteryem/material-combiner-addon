@@ -205,17 +205,15 @@ def get_pixel_buffer(img, atlas_colorspace='sRGB'):
     buffer.shape = (height, width, channels)
 
     # Pixels are always read raw, meaning that changing the colorspace of the image has no effect on the pixels,
-    # but if we want to combine a linear image into an sRGB image such that the linear image appears the same when
-    # viewed in sRGB, we need to convert it to sRGB to linear, so that when it's viewed in sRGB, our initial
-    # conversion from sRGB to linear and the conversion from raw (linear) to sRGB when viewed cancel each other out.
-    # FIXME: Conversion isn't working
+    # but if we want to combine an X colorspace image into a Y colorspace atlas such that the X colorspace image appears
+    # the same when viewed in Y colorspace, we need to pre-convert it from X colorspace to Y colorspace.
     img_color_space = img.colorspace_settings.name
     if atlas_colorspace == 'sRGB':
         if img_color_space == 'sRGB':
             return buffer
         elif img_color_space in linear_colorspaces:
-            # Need to convert from sRGB to linear
-            buffer_convert_srgb_to_linear(buffer)
+            # Need to convert from Linear to sRGB
+            buffer_convert_linear_to_srgb(buffer)
             return buffer
         else:
             raise TypeError("Unsupported image colorspace {} for {}. Must be in {}.".format(img_color_space, img, supported_colorspaces))
@@ -223,8 +221,8 @@ def get_pixel_buffer(img, atlas_colorspace='sRGB'):
         if img_color_space in linear_colorspaces:
             return buffer
         elif img_color_space == 'sRGB':
-            # Need to convert from Linear to sRGB
-            buffer_convert_linear_to_srgb(buffer)
+            # Need to convert from sRGB to linear
+            buffer_convert_srgb_to_linear(buffer)
             return buffer
     else:
         raise TypeError("Unsupported atlas colorspace {}. Must be in {}".format(atlas_colorspace, supported_colorspaces))
