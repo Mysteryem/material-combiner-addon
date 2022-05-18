@@ -113,7 +113,10 @@ class Py_ImBuf(PyVarObject):
 
 
 # Compare against the basicsize to check
-assert imbuf.types.ImBuf.__basicsize__ == ctypes.sizeof(Py_ImBuf)
+# Equivalent to:
+#   assert imbuf.types.ImBuf.__basicsize__ == ctypes.sizeof(Py_ImBuf)
+# but imbuf.types was only added in 2.93
+assert type(imbuf.new((1, 1))).__basicsize__ == ctypes.sizeof(Py_ImBuf)
 
 
 def get_c_imbuf(imbuf_obj):
@@ -179,7 +182,7 @@ def numpy_pixels_to_file(pixel_buffer: np.ndarray, filepath):
     # Store the old fields that we're going to change
     old_channels = c_image_buffer.channels
     # Won't be NULL
-    old_rect = c_image_buffer.rect.content
+    old_rect = c_image_buffer.rect.contents
     old_planes = c_image_buffer.planes
     old_x = c_image_buffer.x
     old_y = c_image_buffer.y
@@ -202,7 +205,7 @@ def numpy_pixels_to_file(pixel_buffer: np.ndarray, filepath):
     finally:
         # ALWAYS set the fields back to the old values to avoid memory leaks/corruption
         c_image_buffer.channels = old_channels
-        c_image_buffer.rect.content = old_rect
+        c_image_buffer.rect.contents = old_rect
         c_image_buffer.planes = old_planes
         c_image_buffer.x = old_x
         c_image_buffer.y = old_y

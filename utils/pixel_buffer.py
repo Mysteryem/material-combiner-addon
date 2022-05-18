@@ -114,7 +114,8 @@ else:  # Oldest theoretically supported Blender version is 2.50, because that's 
 
 if bpy.app.version >= (2, 83):
     def __write_pixel_buffer_internal(img, buffer):
-        img.pixels.foreach_set(buffer)
+        # buffer must be flattened when writing
+        img.pixels.foreach_set(buffer.ravel())
 elif bpy.app.version >= (2, 80):
     try:
         from .ctypes_imbuf_utils import numpy_pixels_to_image
@@ -253,8 +254,7 @@ def write_pixel_buffer(img, buffer):
     width, height = img.size
     image_shape = (height, width, img.channels)
     if buffer.shape == image_shape:
-        # buffer must be flattened when writing
-        __write_pixel_buffer_internal(img, buffer.ravel())
+        __write_pixel_buffer_internal(img, buffer)
     else:
         raise RuntimeError("Buffer shape {} does not match image shape {}".format(buffer.shape, image_shape))
 
