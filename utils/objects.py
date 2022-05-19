@@ -21,8 +21,8 @@ def get_uv(ob, poly):
 
 
 def align_uv(face_uv):
-    min_x = min([math.floor(uv.x) if uv.x != 0.999 else 1 for uv in face_uv if not math.isnan(uv.x)], default=0)
-    min_y = min([math.floor(uv.y) if uv.y != 0.999 else 1 for uv in face_uv if not math.isnan(uv.y)], default=0)
+    min_x = min([math.floor(uv.x) for uv in face_uv if not math.isnan(uv.x)], default=0)
+    min_y = min([math.floor(uv.y) for uv in face_uv if not math.isnan(uv.y)], default=0)
     for uv in face_uv:
         uv.x -= min_x
         uv.y -= min_y
