@@ -183,8 +183,6 @@ def get_gfx(scn, mat, item, src):
     if isinstance(src, str):
         if src:
             img = Image.open(src).convert('RGBA')
-            if img.size != size:
-                img.resize(size, Image.ANTIALIAS)
             if mat.smc_size:
                 img.thumbnail((mat.smc_size_width, mat.smc_size_height), Image.ANTIALIAS)
             if any(uv_size_dimension > 0.999 for uv_size_dimension in item['gfx']['uv_size']):
