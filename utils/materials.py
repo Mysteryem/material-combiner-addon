@@ -9,7 +9,7 @@ from .. import globs
 
 
 def get_materials(ob):
-    return [mat_slot.material for mat_slot in ob.material_slots]
+    return [mat_slot.material for mat_slot in ob.material_slots if mat_slot.material]
 
 
 def shader_type(mat):
