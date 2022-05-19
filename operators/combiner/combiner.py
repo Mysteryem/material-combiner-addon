@@ -28,8 +28,8 @@ class Combiner(bpy.types.Operator):
         if any(dimension > 20000 for dimension in size):
             self.report({'ERROR'}, 'Output image size is too large')
             return {'FINISHED'}
-        atlas = get_atlas(scn, self.structure, size)
-        get_aligned_uv(scn, self.structure, atlas.size)
+        atlas, packed_atlas_size = get_atlas(scn, self.structure, size)
+        get_aligned_uv(scn, self.structure, packed_atlas_size)
         assign_comb_mats(scn, self.data, self.mats_uv, atlas)
         clear_mats(scn, self.mats_uv)
         bpy.ops.smc.refresh_ob_data()

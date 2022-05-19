@@ -220,7 +220,7 @@ def get_atlas(scn, data, size):
                                                                   i['gfx']['fit']['y'] + int(scn.smc_gaps / 2)))
     if scn.smc_size == 'CUST':
         img.thumbnail((scn.smc_size_width, scn.smc_size_height), Image.ANTIALIAS)
-    return img
+    return img, size
 
 
 def get_aligned_uv(scn, data, size):
