@@ -187,7 +187,7 @@ def get_gfx(scn, mat, item, src):
                 img.resize(size, Image.ANTIALIAS)
             if mat.smc_size:
                 img.thumbnail((mat.smc_size_width, mat.smc_size_height), Image.ANTIALIAS)
-            if any(item['gfx']['uv_size']) > 0.999:
+            if any(uv_size_dimension > 0.999 for uv_size_dimension in item['gfx']['uv_size']):
                 img = get_uv_image(item, img, size)
             if mat.smc_diffuse:
                 diffuse_img = Image.new('RGBA', size, get_diffuse(mat))
