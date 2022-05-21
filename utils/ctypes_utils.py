@@ -29,8 +29,8 @@ PyObject._fields_ = [
 """
 #ifdef Py_TRACE_REFS
 /* Define pointers to support a doubly-linked list of all live heap objects. */
-#define _PyObject_HEAD_EXTRA            \
-    struct _object *_ob_next;           \
+#define _PyObject_HEAD_EXTRA            \\
+    struct _object *_ob_next;           \\
     struct _object *_ob_prev;
 
 #define _PyObject_EXTRA_INIT 0, 0,
@@ -42,7 +42,9 @@ PyObject._fields_ = [
 """
 # Compare against object basicsize to check
 if object.__basicsize__ != ctypes.sizeof(PyObject):
-    # Change the fields to include the extra fields
+    # Remake the class with the extra fields (_fields_ cannot be modified after being set)
+    class PyObject(ctypes.Structure):
+        pass
     PyObject._fields_ = [
         ('_ob_next', ctypes.POINTER(PyObject)),
         ('_ob_prev', ctypes.POINTER(PyObject)),
