@@ -116,33 +116,27 @@ if bpy.app.version >= (2, 83):
     def __write_pixel_buffer_internal(img, buffer):
         # buffer must be flattened when writing
         img.pixels.foreach_set(buffer.ravel())
-elif bpy.app.version >= (2, 80):
+else:
     try:
-        from .ctypes_imbuf_utils import numpy_pixels_to_image
+        from .ctypes_fast_pixel_write import set_pixels_matrix_hack
 
-        # Note that, as this writes a file to disk and then loads that file as an Image, the timing will also vary with
-        # disk speed/activity instead of only cpu speed/activity. These times were recorded with an SSD.
-        # For images smaller than about 128x128, this may actually be slower, but at that point, the performance
-        # difference between the different methods is pretty much negligible (less than 1ms).
-        # These times are recorded with write_to_image_filepath=False because that includes the time that Blender takes
-        # to load the updated image.pixels, which are otherwise lazy loaded.
-        # 58.2ms for 1024x1024
-        # 201.3ms for 2048x2048
-        # 740.1ms for 4096x4096
-        # 2810.9ms for 8192x8192
+        # Performs a direct memory copy, so is almost as fast as foreach_set from Blender 2.83 and newer. It might work
+        # as far back as Blender 2.63, but has only been tested as far back as Blender 2.79
+        # 7.8ms for 1024x1024
+        # 35.7ms for 2048x2048
+        # 135.8ms for 4096x4096
+        # 701.7ms for 8192x8192
         def __write_pixel_buffer_internal(img, buffer):
-            numpy_pixels_to_image(img, buffer, write_to_image_filepath=False)
+            set_pixels_matrix_hack(img, buffer)
 
     except AssertionError:
-        print("Failed to import ctypes_imbuf_utils, resorting to using much slower iteration to set image pixels")
+        print("Failed to import ctypes_fast_pixel_write, resorting to using 10 times slower method to set image pixels")
 
-        def __write_pixel_buffer_internal(img, buffer):
-            img.pixels = array.array(pixel_ctype, buffer.tobytes())
-else:
-    def __write_pixel_buffer_internal(img, buffer):
         # Added in Blender 2.83, here for reference
         # 7.6ms for 1024x1024
+        # 29.6ms for 2048x2048
         # 114.7ms for 4096x4096
+        # 471.5ms for 8192x8192
         # img.pixels.foreach_set(buffer)
         #
         # From a thread I found discussing the performance of Image.pixels, this was considered the fastest method
@@ -162,7 +156,8 @@ else:
         # 6407.5ms for 8192x8192
         # TODO: If we can know that large areas of the atlas remain the generated colour of the image, maybe we could
         #  skip setting the pixels in those areas for a potential speed up
-        img.pixels = array.array(pixel_ctype, buffer.tobytes())
+        def __write_pixel_buffer_internal(img, buffer):
+            img.pixels = array.array(pixel_ctype, buffer.tobytes())
 
 linear_colorspaces = {'Linear', 'Non-Color', 'Raw'}
 supported_colorspaces = linear_colorspaces | {'sRGB'}

@@ -9,10 +9,6 @@ from .ctypes_utils import PyVarObject
 # This module is only used for Blender 2.79 and older where there is no fast method to get all of an Image's pixels into
 # a numpy array
 # When importing this module, make sure to surround it in a try block and have some sort of backup plan if it fails
-# TODO: Setting Image.pixels is slow up until Blender 2.83.
-#  Could we also use ctypes to access and set the underlying memory of Image.pixels? Look for BPy_PropertyArrayRNA and
-#  see https://developer.blender.org/D7053 for the commit that added foreach_get/foreach_set.
-#  If we can figure out that access, it would likely be faster for getting pixels on Blender 2.82 and older too.
 
 # Declare class to mirror bgl.Buffer's _Buffer type
 # The fields for bgl.Buffer haven't been changed since its introduction, but if they are changed in the future, then
