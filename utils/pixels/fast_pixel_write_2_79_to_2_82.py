@@ -6,7 +6,7 @@
 # dimensions to match the hacked Matrix.
 # Then, setting image.pixels = hacked_matrix performs a direct memcpy of all the Matrix's data to the image.pixels'
 # data.
-# Once done, all the hacked values are restored to avoid memory leaks/corruption and the hacked Matrix is deleted.
+# Once done, all the hacked values are restored to avoid memory leaks/corruption and the Matrix is deleted.
 
 import bpy
 from bpy.app import version as blender_version
@@ -32,10 +32,11 @@ if blender_version < (2, 79):
               " but might work on as old as 2.63")
 
 import ctypes
+import numpy as np
 
 from mathutils import Matrix
 
-from .ctypes_utils import PyVarObject, PyObject
+from .ctypes_base import PyVarObject, PyObject
 
 # This magic value is an internal Blender hack used to determine if a PropertyRNA is not an IDProperty
 # Defined in source/blender/makesrna/intern/rna_internal.h
@@ -389,6 +390,11 @@ def set_pixels_matrix_hack(image, pixel_buffer):
     # copying more chunks until all the data has been copied.
     if matrix_rows > ushort_max or matrix_columns > ushort_max:
         raise TypeError("Image/Pixel buffer is too large, maximum width or height is {}".format(ushort_max // 2))
+
+    # The pixel buffer must be C contiguous, otherwise when the memory is copied, the pixels will end up in the wrong
+    # order.
+    # If pixel_buffer was already C contiguous, this does nothing and simply returns pixel_buffer.
+    pixel_buffer = np.ascontiguousarray(pixel_buffer)
 
     # Get ctypes representation of pixels
     pixels_prop_array = PropertyArrayRNA.from_address(id(image.pixels))
