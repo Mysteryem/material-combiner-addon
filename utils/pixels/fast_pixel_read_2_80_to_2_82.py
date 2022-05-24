@@ -7,13 +7,10 @@ from .pixel_types import pixel_gltype, pixel_dtype
 
 # see https://blender.stackexchange.com/a/230242 for details
 def get_pixels_gl_shared_buffer(image):
-    # TODO: Check that transparency doesn't premultiply even if the image is set to premultiply, we want the raw
-    #  pixels!
     pixels = image.pixels
     # Load the image into OpenGL and use that to get the pixels in a more performant manner
     # As per the documentation, the colours will be read in scene linear color space and have premultiplied or
     # straight alpha matching the image alpha mode.
-    # TODO: Temporarily set alpha mode to STRAIGHT if image is set to PREMULTIPLY?
     # see https://blender.stackexchange.com/a/230242 for details
     # Open GL will cache the image if we've used it previously, this means that if we update the image in Blender
     # it won't have updated in Open GL unless we free it first. There isn't really a way to know if the image has
