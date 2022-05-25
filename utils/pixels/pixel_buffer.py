@@ -11,7 +11,7 @@ linear_colorspaces = {'Linear', 'Non-Color', 'Raw'}
 supported_colorspaces = linear_colorspaces | {'sRGB'}
 
 
-def new_pixel_buffer(size, color=(0.0, 0.0, 0.0, 0.0)):
+def new_pixel_buffer(size, color=(0.0, 0.0, 0.0, 0.0), read_only_rectangle=False):
     """Create a new blank pixel buffer, filled with a single color.
 
     A 'pixel buffer' is a single precision float type numpy array, viewed in the 3D shape
@@ -25,10 +25,37 @@ def new_pixel_buffer(size, color=(0.0, 0.0, 0.0, 0.0)):
     width, height = size
     # rgba
     channels = len(color)
+    # color could be an ndarray, but len only counts the length of the first dimension so the dimensions need to be
+    # checked too
+    if isinstance(color, np.ndarray) and len(color.shape) != 1:
+        raise TypeError("color must be one dimensional, but has shape {}".format(color.shape))
     if channels > 4 or channels == 0:
         raise TypeError("A color can have between 1 and 4 (inclusive) components, but found {} in {}".format(channels, color))
-    buffer = np.full((height, width, channels), fill_value=color, dtype=pixel_dtype)
+    if read_only_rectangle:
+        # Create a 1x1 pixel_buffer, and then broadcast it to the specified shape, this creates a read-only
+        # pixel buffer that acts like it is the full size, but every pixel shares the same memory
+        buffer_base = np.array([[color]], dtype=pixel_dtype)
+        buffer = np.broadcast_to(buffer_base, (height, width, channels))
+    else:
+        buffer = np.full((height, width, channels), fill_value=color, dtype=pixel_dtype)
     return buffer
+
+
+def is_read_only_rectangle(buffer):
+    base = buffer.base
+    return (not buffer.flags.writeable  # read-only means it's not writeable
+            and base is not None  # it must have a base array
+            and len(base.shape) == 3  # the base array must be 3-dimensional
+            and base.shape[0] == 1  # the height must be 1px
+            and base.shape[1] == 1  # the width must be 1px
+            and 1 <= base.shape[2] <= 4)  # the number of channels must be 1 to 4 inclusive
+
+
+def get_base_if_read_only_rectangle(buffer):
+    if is_read_only_rectangle(buffer):
+        return buffer.base
+    else:
+        return buffer
 
 
 def get_pixel_buffer(image, target_colorspace='sRGB'):
@@ -115,6 +142,9 @@ def buffer_to_image(buffer, *, name):
 
 def buffer_convert_linear_to_srgb(buffer):
     """Convert a pixel buffer's pixels from linear colorspace to sRGB colorspace"""
+    # If the buffer is a read-only rectangle, get the base array so that it can be modified
+    buffer = get_base_if_read_only_rectangle(buffer)
+
     # Alpha is always linear, so get a view of only RGB.
     rgb_only_view = buffer[:, :, :3]
 
@@ -139,6 +169,9 @@ def buffer_convert_linear_to_srgb(buffer):
 
 def buffer_convert_srgb_to_linear(buffer):
     """Convert a pixel buffer's pixels from sRGB colorspace to linear colorspace"""
+    # If the buffer is a read-only rectangle, get the base array so that it can be modified
+    buffer = get_base_if_read_only_rectangle(buffer)
+
     # Alpha is always linear, so get a view of only RGB.
     rgb_only_view = buffer[:, :, :3]
 

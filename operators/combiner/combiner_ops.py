@@ -226,7 +226,7 @@ def get_gfx(scn, mat, item, src):
         # src must be a color in a tuple/list of components
         if len(src) != 4:
             raise TypeError("Invalid colour '{}', must be tuple-like with 4 elements (RGBA).".format(src))
-        img_buffer = new_pixel_buffer(size, src)
+        img_buffer = new_pixel_buffer(size, src, read_only_rectangle=True)
     return img_buffer
 
 
