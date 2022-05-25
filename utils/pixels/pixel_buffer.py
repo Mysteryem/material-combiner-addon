@@ -121,12 +121,20 @@ def buffer_convert_linear_to_srgb(buffer):
     is_small = rgb_only_view < 0.0031308
 
     small_rgb = rgb_only_view[is_small]
-    # This can probably be optimised
-    rgb_only_view[is_small] = np.where(small_rgb < 0.0, 0, small_rgb * 12.92)
+
+    # rgb_only_view[is_small] = np.where(small_rgb < 0.0, 0, small_rgb * 12.92)
+    np.maximum(small_rgb, 0, out=small_rgb)
+    small_rgb *= 12.92
+    rgb_only_view[is_small] = small_rgb
 
     is_not_small = np.invert(is_small, out=is_small)
 
-    rgb_only_view[is_not_small] = 1.055 * (rgb_only_view[is_not_small] ** (1.0 / 2.4)) - 0.055
+    # rgb_only_view[is_not_small] = 1.055 * (rgb_only_view[is_not_small] ** (1.0 / 2.4)) - 0.055
+    large_rgb = rgb_only_view[is_not_small]
+    large_rgb **= 1.0/2.4
+    large_rgb *= 1.055
+    large_rgb -= 0.055
+    rgb_only_view[is_not_small] = large_rgb
 
 
 def buffer_convert_srgb_to_linear(buffer):
@@ -137,12 +145,20 @@ def buffer_convert_srgb_to_linear(buffer):
     is_small = rgb_only_view < 0.04045
 
     small_rgb = rgb_only_view[is_small]
-    # This can probably be optimised
-    rgb_only_view[is_small] = np.where(small_rgb < 0.0, 0, small_rgb / 12.92)
+
+    # rgb_only_view[is_small] = np.where(small_rgb < 0.0, 0, small_rgb / 12.92)
+    np.maximum(small_rgb, 0, out=small_rgb)
+    small_rgb /= 12.92
+    rgb_only_view[is_small] = small_rgb
 
     is_not_small = np.invert(is_small, out=is_small)
 
-    rgb_only_view[is_not_small] = ((rgb_only_view[is_not_small] + 0.055) / 1.055) ** 2.4
+    # rgb_only_view[is_not_small] = ((rgb_only_view[is_not_small] + 0.055) / 1.055) ** 2.4
+    large_rgb = rgb_only_view[is_not_small]
+    large_rgb += 0.055
+    large_rgb /= 1.055
+    large_rgb **= 2.4
+    rgb_only_view[is_not_small] = large_rgb
 
 
 def pixel_buffer_paste(target_buffer, source_buffer_or_pixel, corner_or_box):
