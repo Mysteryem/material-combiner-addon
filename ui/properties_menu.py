@@ -4,7 +4,7 @@ from .. import globs
 from ..utils.images import get_image
 from ..utils.materials import shader_type
 from ..utils.textures import get_texture
-
+from ..utils.previews import get_preview
 
 class PropertiesMenu(bpy.types.Operator):
     bl_label = 'Settings for material:'
@@ -42,7 +42,7 @@ class PropertiesMenu(bpy.types.Operator):
         layout = self.layout
         col = layout.column()
         col.scale_y = 1.2
-        col.prop(item.mat, 'name', text='', icon_value=item.mat.preview.icon_id)
+        col.prop(item.mat, 'name', text='', icon_value=get_preview(item.mat).icon_id)
         if img:
             col.label(text='Image size: {}x{}px'.format(img.size[0], img.size[1]))
             col.separator()
