@@ -208,7 +208,7 @@ def pixel_buffer_paste(target_buffer, source_buffer_or_pixel, corner_or_box):
     """
     # box coordinates treat (0,0) as top left, but bottom left is (0,0) in blender, so view the buffer with flipped
     # y-axis
-    target_buffer = target_buffer[::-1, :, :]
+    target_buffer = np.flipud(target_buffer)
     if isinstance(source_buffer_or_pixel, np.ndarray):
         source_dimensions = len(source_buffer_or_pixel.shape)
         if source_dimensions == 3:
@@ -251,7 +251,7 @@ def pixel_buffer_paste(target_buffer, source_buffer_or_pixel, corner_or_box):
     else:
         # box coordinates treat (0,0) as top left, but bottom left is (0,0) in blender, so view the buffer with flipped
         # y-axis
-        source_buffer = source_buffer_or_pixel[::-1, :, :]
+        source_buffer = np.flipud(source_buffer_or_pixel)
         # Parse a corner into a box
         if len(corner_or_box) == 2:
             # Only the top left corner to place the source buffer has been set, we will figure out the bottom right
