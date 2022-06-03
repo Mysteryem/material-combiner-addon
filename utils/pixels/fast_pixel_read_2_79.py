@@ -2,7 +2,8 @@ import bpy
 if bpy.app.version >= (2, 80):
     raise RuntimeError("ctypes buffer utils was attempted to be loaded on Blender version >=2.80")
 
-# TODO: Find out the oldest supported version
+# The oldest technically supported version is probably 2.50 since that's when the bgl module was added, but Blender
+# didn't even support addons until 2.53, so there isn't really a need to check for this.
 
 import bgl
 import numpy as np
@@ -12,7 +13,6 @@ from .pixel_types import pixel_gltype, pixel_dtype
 from .fallback_pixel_access import get_pixels_no_gl
 # This module is only used for Blender 2.79 and older where there is no fast method to get all of an Image's pixels into
 # a numpy array
-# When importing this module, make sure to surround it in a try block and have some sort of backup plan if it fails
 
 
 # Declare class to mirror bgl.Buffer's _Buffer type

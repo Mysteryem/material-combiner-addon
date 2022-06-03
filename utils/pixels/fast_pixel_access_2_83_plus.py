@@ -1,11 +1,12 @@
 import numpy as np
 from .pixel_types import pixel_dtype
 
+# The foreach_get and foreach_set methods for image.pixels were added in Blender 2.83
+
 
 def get_pixels(image):
     pixels = image.pixels
     buffer = np.empty(len(pixels), dtype=pixel_dtype)
-    # Buffer must be flat when reading
     pixels.foreach_get(buffer)
     return buffer
 

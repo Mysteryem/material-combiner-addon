@@ -364,6 +364,7 @@ ushort_max = 65535
 def set_pixels_matrix_hack(image, pixel_buffer):
     height, width, channels = pixel_buffer.shape
     if channels != 4:
+        # Limitation is in place because we're assuming 4 in the matrix_rows and matrix_columns calculation
         raise TypeError("Only pixel_buffers with 4 channels supported")
     if channels != image.channels:
         raise TypeError("Image channels {} doesn't match pixel_buffer channels {}".format(image.channels, channels))
@@ -384,7 +385,7 @@ def set_pixels_matrix_hack(image, pixel_buffer):
 
     # Matrix columns and rows are limited to a maximum of 65535 due to being unsigned short type, this limits the
     # maximum image height and width to 32767 when the 4 channels are split 2 and 2 between the height and width.
-    # 32767 pixels in one dimension is a huge image, would is unlikely to ever be needed, however, if support for larger
+    # 32767 pixels in one dimension is a huge image, which is unlikely to ever be needed, however, if support for larger
     # images is needed, we could set up the matrix to copy as much of the data as possible and then offset the matrix's
     # data pointer ('matrix') to one element after the copied data and copy another chunk of the data, repeatedly
     # copying more chunks until all the data has been copied.
