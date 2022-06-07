@@ -235,8 +235,8 @@ def pixel_buffer_paste(target_buffer: PixelBuffer, source_buffer_or_pixel: Pixel
         buffer_height, buffer_width, _buffer_channels = target_buffer.shape
         box_left = max(box_left, 0)
         box_upper = max(box_upper, 0)
-        box_right = min(box_right, buffer_width + 1)
-        box_lower = min(box_lower, buffer_height + 1)
+        box_right = min(box_right, buffer_width)
+        box_lower = min(box_lower, buffer_height)
         return box_left, box_upper, box_right, box_lower
 
     if source_is_pixel:
