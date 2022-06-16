@@ -30,7 +30,8 @@ class PropTuple(namedtuple('PropTupleBase', ['prop_holder', 'path'])):
 def to_255_scale_tuple(rgba):
     # Convert to unsigned char (unsigned byte)
     # This is the same conversion Blender uses internally, as defined in unit_float_to_uchar_clamp in
-    # math_base_inline.c, albeit vectorized for numpy
+    # math_base_inline.c, albeit vectorized for numpy. It doesn't really need to be vectorized since colors are only
+    # 4 values, but this was leftover code from previously using ImBuf to write pixels to an Image faster.
     rgba = np.array(rgba, dtype=np.single)
     condition_list = [rgba <= np.single(0.0), rgba > (np.single(1.0) - np.single(0.5) / np.single(255.0))]
     choice_list = [np.single(0.0), np.single(255.0)]
@@ -170,19 +171,32 @@ class MaterialSource:
             source_data = MaterialSource.from_node(output_node)
             if source_data:
                 return source_data
-        return MaterialSource()
+        # As a last ditch attempt, if there is only one Image Texture node in the material, use that.
+        return MaterialSource.from_singular_image_texture_node(node_tree.nodes)
 
     @staticmethod
     def from_override(nodes: bpy_prop_collection):
-        # First try to get override by name
         override_node = nodes.get(MaterialSource.image_override_name)
-        # Otherwise try to get override by label
-        if not override_node:
-            override_node_gen = (n for n in nodes if n.label == MaterialSource.image_override_name)
-            override_node = next(override_node_gen, None)
         if override_node:
             return MaterialSource.from_node(override_node)
-        return MaterialSource()
+        else:
+            return MaterialSource()
+
+    @staticmethod
+    def from_singular_image_texture_node(nodes: bpy_prop_collection):
+        found_node = None
+        for node in nodes:
+            # If node is an Image Texture node, and it has an image assigned
+            if node.type == 'TEX_IMAGE' and node.image:
+                if found_node is not None:
+                    # Already found one previously, so there is more than one Image Texture node.
+                    return MaterialSource()
+                found_node = node
+        if found_node:
+            return MaterialSource.from_node(found_node)
+        else:
+            return MaterialSource()
+
 
     @staticmethod
     def from_node(node: ShaderNode):

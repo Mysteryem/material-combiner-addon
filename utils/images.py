@@ -6,7 +6,7 @@ from .pixels.pixel_buffer import (color_convert_linear_to_srgb, pixel_dtype, col
 
 def is_single_colour_generated(img):
     """:return:True if the img argument is a generated image of a single color that doesn't have any pending changes"""
-    return not img.is_dirty and img.generated_type == 'BLANK'
+    return img.source == 'GENERATED' and not img.is_dirty and img.generated_type == 'BLANK'
 
 
 # The generated color is in linear, if the image is in sRGB, the color must be converted
