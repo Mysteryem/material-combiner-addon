@@ -197,13 +197,14 @@ class MaterialSource:
         else:
             return MaterialSource()
 
-
     @staticmethod
     def from_node(node: ShaderNode):
         if node.type == 'OUTPUT_MATERIAL':
             surface_input = node.inputs['Surface']
             if surface_input.is_linked:
-                return MaterialSource.from_node(surface_input.links[0].from_node)
+                link = surface_input.links[0]
+                if link.is_valid:
+                    return MaterialSource.from_node(link.from_node)
         elif node.type == 'TEX_IMAGE':
             if node.image:
                 return MaterialSource(image=node.image)
@@ -225,17 +226,25 @@ class MaterialSource:
                 if fac_input.default_value == 0:
                     first_shader_input = node.inputs[1]
                     if first_shader_input.is_linked:
-                        return MaterialSource.from_node(first_shader_input.links[0].from_node)
+                        link = first_shader_input.links[0]
+                        if link.is_valid:
+                            return MaterialSource.from_node(link.from_node)
                 elif fac_input.default_value == 1:
                     second_shader_input = node.inputs[2]
                     if second_shader_input.is_linked:
-                        return MaterialSource.from_node(second_shader_input.links[0].from_node)
+                        link = second_shader_input.links[0]
+                        if link.is_valid:
+                            return MaterialSource.from_node(link.from_node)
         return MaterialSource()
 
     @staticmethod
     def from_color_input_socket(input_socket: NodeSocketColor):
         if input_socket.is_linked:
-            return MaterialSource.from_node(input_socket.links[0].from_node)
+            link = input_socket.links[0]
+            if link.is_valid:
+                return MaterialSource.from_node(input_socket.links[0].from_node)
+            else:
+                return MaterialSource()
         else:
             return MaterialSource(color=PropTuple(input_socket, 'default_value'))
 
