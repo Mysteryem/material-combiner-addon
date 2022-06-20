@@ -3,7 +3,7 @@ import bgl
 import numpy as np
 import array
 
-from .pixel_types import pixel_gltype, pixel_dtype, pixel_ctype
+from .pixel_types import pixel_gltype, pixel_dtype
 
 # These functions are the last resort ways to get and set pixels to/from numpy arrays that are still faster than most
 # other simpler and safer methods, but are generally still quite slow.
@@ -19,7 +19,7 @@ def get_pixels_no_gl(image):
     return np.array(image.pixels[:], dtype=pixel_dtype)
 
 
-# This only works on 2.79 and older due to changes to image.bindcode and image.gl_load in newer Blender versions.
+# This only works on 2.79 and older due to changes to image.bindcode in newer Blender versions.
 # Getting pixels through Open GL and then into a numpy array via np.fromiter(buffer, dtype=pixel_dtype).
 #
 # Blender 2.80 to 2.82 have a fast, safe method of getting image pixels, so this fallback is never needed in those
@@ -30,14 +30,17 @@ def get_pixels_no_gl(image):
 # 2544.3ms for 4096x4096
 # 10110.2ms for 8192x8192, uses about 2GB of memory while reading
 def get_pixels_gl_buffer_iter_2_79(image):
+    if image.is_float:
+        # gl_load fails with an error on 2.79 when the image uses a float buffer internally, this seems to be a bug in
+        # Blender
+        return get_pixels_no_gl(image)
     pixels = image.pixels
     if image.bindcode[0]:
         image.gl_free()
-    if image.gl_load(0, bgl.GL_NEAREST, bgl.GL_NEAREST):
+    if image.gl_load():
         print("Could not load {} into Open GL, resorting to a slower method of getting pixels".format(image))
         return get_pixels_no_gl(image)
     num_pixel_components = len(pixels)
-    bgl.glEnable(bgl.GL_TEXTURE_2D)
     bgl.glActiveTexture(bgl.GL_TEXTURE0)
     bgl.glBindTexture(bgl.GL_TEXTURE_2D, image.bindcode[0])
 
