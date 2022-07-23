@@ -1,4 +1,5 @@
 import bpy
+import globs
 from bpy.props import *
 from . import addon_updater_ops
 
@@ -19,7 +20,11 @@ class CombineList(bpy.types.PropertyGroup):
         step=1,
         default=1)
     used = BoolProperty(default=True)
-    type = IntProperty(default=0)
+    type = EnumProperty(items=[
+        (globs.C_L_OBJECT, "Object", "Object"),
+        (globs.C_L_MATERIAL, "Material", "Material"),
+        (globs.C_L_END, "End", "End"),
+    ], default='C_L_OBJECT')
 
 
 class UpdatePreferences(bpy.types.AddonPreferences):
