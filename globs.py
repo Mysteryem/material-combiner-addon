@@ -17,4 +17,3 @@ smc_pi = False
 # CombineList type constants
 C_L_OBJECT = 'C_L_OBJECT'
 C_L_MATERIAL = 'C_L_MATERIAL'
-C_L_END = 'C_L_END'

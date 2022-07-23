@@ -23,7 +23,6 @@ class CombineList(bpy.types.PropertyGroup):
     type = EnumProperty(items=[
         (globs.C_L_OBJECT, "Object", "Object"),
         (globs.C_L_MATERIAL, "Material", "Material"),
-        (globs.C_L_END, "End", "End"),
     ], default='C_L_OBJECT')
 
 
