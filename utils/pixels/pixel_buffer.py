@@ -6,6 +6,7 @@ import numpy as np
 from . import pixel_access
 from .pixel_types import pixel_dtype
 from ..type_hints import PixelBuffer, Size, Pixel, CornerOrBox
+from ...globs import debug_print
 
 # A 'pixel buffer' is a single precision float type numpy array, viewed in the 3D shape
 # (height, width, channels), used to store data representing image pixels.
@@ -279,7 +280,7 @@ def pixel_buffer_paste(target_buffer: PixelBuffer, source_buffer: PixelBuffer, c
         fit_right = min(right, buffer_width)
         fit_lower = min(lower, buffer_height)
         if fit_left != left or fit_upper != upper or fit_right != right or fit_lower != lower:
-            print('DEBUG: Image to be pasted did not fit into target image, {} -> {}'.format((left, upper, right, lower), (fit_left, fit_upper, fit_right, fit_lower)))
+            debug_print('DEBUG: Image to be pasted did not fit into target image, {} -> {}'.format((left, upper, right, lower), (fit_left, fit_upper, fit_right, fit_lower)))
         # If the pasted buffer can extend outside the source image, we need to figure out the area which fits within
         # the source image
         source_left = fit_left - left
@@ -287,7 +288,8 @@ def pixel_buffer_paste(target_buffer: PixelBuffer, source_buffer: PixelBuffer, c
         source_right = source_buffer.shape[1] - right + fit_right
         source_lower = source_buffer.shape[0] - lower + fit_lower
         num_source_channels = source_buffer.shape[2]
-        print("DEBUG: Pasting into box {} of target from box {} of source".format((fit_left, fit_upper, fit_right, fit_lower), (source_left, source_upper, source_right, source_lower)))
+        debug_print("DEBUG: Pasting into box {} of target from box {} of source".format(
+            (fit_left, fit_upper, fit_right, fit_lower), (source_left, source_upper, source_right, source_lower)))
         target_buffer[fit_upper:fit_lower, fit_left:fit_right, :num_source_channels] = source_buffer[source_upper:source_lower, source_left:source_right]
     else:
         raise TypeError("Pixels in source have more channels than pixels in target, they cannot be pasted")
