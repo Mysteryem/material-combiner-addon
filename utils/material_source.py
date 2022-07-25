@@ -16,17 +16,6 @@ class PropTuple(namedtuple('PropTupleBase', ['prop_holder', 'path'])):
     def resolve(self):
         return self.prop_holder.path_resolve(self.path)
 
-    # TODO: When creating PropTuple instances, it may be a better idea to get the .id_data of the prop_holder and get
-    #  the full path to the property, it would be more resilient to Blender internally recreating instances, but could
-    #  be slower or maybe not even work in UI.
-    # @staticmethod
-    # def new(prop_holder: bpy_struct, path: str, path_from_id=True):
-    #     if path_from_id:
-    #         prop = prop_holder.path_resolive(path, False)
-    #         return PropTuple(prop.id_data, prop.path_from_id())
-    #     else:
-    #         return PropTuple(prop_holder, path)
-
 
 def to_255_scale_tuple(rgba):
     # Convert to unsigned char (unsigned byte)

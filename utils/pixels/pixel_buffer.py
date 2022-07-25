@@ -180,6 +180,7 @@ def color_convert_srgb_to_linear(color_array):
     return color_as_array
 
 
+# Uses the same conversion as Blender's node_color.h
 def buffer_convert_linear_to_srgb(buffer: PixelBuffer):
     """In-place convert a linear colorspace pixel buffer such that it will look the same in an sRGB colorspace"""
     # If the buffer is a read-only rectangle, get the base array so that it can be modified
@@ -188,17 +189,22 @@ def buffer_convert_linear_to_srgb(buffer: PixelBuffer):
     # Alpha is always linear, so get a view of only RGB.
     rgb_only_view = buffer[:, :, :3]
 
+    # Mask of all small values
     is_small = rgb_only_view < 0.0031308
 
+    # Array of only the small values
     small_rgb = rgb_only_view[is_small]
 
+    # Slightly faster than:
     # rgb_only_view[is_small] = np.where(small_rgb < 0.0, 0, small_rgb * 12.92)
     np.maximum(small_rgb, 0, out=small_rgb)
     small_rgb *= 12.92
     rgb_only_view[is_small] = small_rgb
 
+    # New variable name for clarity
     is_not_small = np.invert(is_small, out=is_small)
 
+    # In-place equivalent of:
     # rgb_only_view[is_not_small] = 1.055 * (rgb_only_view[is_not_small] ** (1.0 / 2.4)) - 0.055
     large_rgb = rgb_only_view[is_not_small]
     large_rgb **= 1.0/2.4
@@ -207,6 +213,7 @@ def buffer_convert_linear_to_srgb(buffer: PixelBuffer):
     rgb_only_view[is_not_small] = large_rgb
 
 
+# Uses the same conversion as Blender's node_color.h
 def buffer_convert_srgb_to_linear(buffer: PixelBuffer):
     """In-place convert an sRGB colorspace pixel buffer such that it will look the same in a linear colorspace"""
     # If the buffer is a read-only rectangle, get the base array so that it can be modified
@@ -215,17 +222,22 @@ def buffer_convert_srgb_to_linear(buffer: PixelBuffer):
     # Alpha is always linear, so get a view of only RGB.
     rgb_only_view = buffer[:, :, :3]
 
+    # Mask of all small values
     is_small = rgb_only_view < 0.04045
 
+    # Array of only the small values
     small_rgb = rgb_only_view[is_small]
 
+    # Slightly faster than:
     # rgb_only_view[is_small] = np.where(small_rgb < 0.0, 0, small_rgb / 12.92)
     np.maximum(small_rgb, 0, out=small_rgb)
     small_rgb /= 12.92
     rgb_only_view[is_small] = small_rgb
 
+    # New variable name for clarity
     is_not_small = np.invert(is_small, out=is_small)
 
+    # In-place equivalent of:
     # rgb_only_view[is_not_small] = ((rgb_only_view[is_not_small] + 0.055) / 1.055) ** 2.4
     large_rgb = rgb_only_view[is_not_small]
     large_rgb += 0.055
@@ -280,7 +292,9 @@ def pixel_buffer_paste(target_buffer: PixelBuffer, source_buffer: PixelBuffer, c
         fit_right = min(right, buffer_width)
         fit_lower = min(lower, buffer_height)
         if fit_left != left or fit_upper != upper or fit_right != right or fit_lower != lower:
-            debug_print('DEBUG: Image to be pasted did not fit into target image, {} -> {}'.format((left, upper, right, lower), (fit_left, fit_upper, fit_right, fit_lower)))
+            debug_print('DEBUG: Image to be pasted did not fit into target image, {} -> {}'
+                        .format((left, upper, right, lower), (fit_left, fit_upper, fit_right, fit_lower)))
+
         # If the pasted buffer can extend outside the source image, we need to figure out the area which fits within
         # the source image
         source_left = fit_left - left
