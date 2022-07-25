@@ -46,9 +46,11 @@ def align_uv(face_uv):
     x_uvs = []
     y_uvs = []
     for uv in face_uv:
-        x_uvs.append(uv.x)
-        y_uvs.append(uv.y)
-    # Find the minimum of both (this will ignore any NaNs)
+        if not math.isnan(uv.x):
+            x_uvs.append(uv.x)
+        if not math.isnan(uv.y):
+            y_uvs.append(uv.y)
+    # Find the minimum of both
     min_x = min(x_uvs, default=0)
     min_y = min(y_uvs, default=0)
 
