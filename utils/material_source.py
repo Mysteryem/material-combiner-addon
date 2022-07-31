@@ -30,9 +30,6 @@ def to_255_scale_tuple(rgba):
 
 
 class MaterialSource:
-    # Name of the Image Texture node to use as an override when getting a Material's Image
-    image_override_name = "MaterialCombinerOverride"
-
     # Used when trying to get a color value from a material that has no color
     # This is the multiplicative identity, i.e., multiplying a pixel by it does nothing
     opaque_white = (1, 1, 1, 1)
@@ -141,8 +138,8 @@ class MaterialSource:
             return color_source
 
     @staticmethod
-    def from_node_tree(node_tree: ShaderNodeTree):
-        source_data = MaterialSource.from_override(node_tree.nodes)
+    def from_node_tree(node_tree: ShaderNodeTree, override_name: str = ''):
+        source_data = MaterialSource.from_override(node_tree.nodes, override_name)
         if source_data:
             return source_data
         # Get the output nodes for all renderer targets.
@@ -164,8 +161,8 @@ class MaterialSource:
         return MaterialSource.from_singular_image_texture_node(node_tree.nodes)
 
     @staticmethod
-    def from_override(nodes: bpy_prop_collection):
-        override_node = nodes.get(MaterialSource.image_override_name)
+    def from_override(nodes: bpy_prop_collection, override_name: str):
+        override_node = nodes.get(override_name)
         if override_node:
             return MaterialSource.from_node(override_node)
         else:
@@ -273,7 +270,7 @@ class MaterialSource:
         if mat:
             if bpy.app.version >= (2, 80):
                 if mat.use_nodes:
-                    return MaterialSource.from_node_tree(mat.node_tree)
+                    return MaterialSource.from_node_tree(mat.node_tree, override_name=mat.smc_override_node_name)
                 else:
                     return MaterialSource(color=PropTuple(mat, 'diffuse_color'))
             else:

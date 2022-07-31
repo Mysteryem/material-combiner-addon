@@ -31,6 +31,16 @@ __bl_classes = [
     extend_lists.SMC_UL_Combine_List,
 ]
 
+if globs.is_blender_2_80_or_newer:
+    __bl_classes += [
+        # The shader nodes operators and panel are only used in Blender 2.80+
+        ui.shader_nodes_panels.ShaderNodesOverridePanel,
+        operators.shader_nodes_override.SetOverrideAsActive,
+        operators.shader_nodes_override.SetActiveNodeAsOverride,
+        operators.shader_nodes_override.ClearOverride,
+        operators.shader_nodes_override.FrameOverride,
+    ]
+
 
 def register_all(bl_info):
     register_classes()
