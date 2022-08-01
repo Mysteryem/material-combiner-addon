@@ -9,12 +9,12 @@ def get_node_display_label(node):
     # Custom nodes can define a draw_label function
     elif hasattr(node, 'draw_label'):
         return node.draw_label()
+    # Image Texture nodes display the name of their .image
     elif node.type == 'TEX_IMAGE' and node.image:
         return node.image.name
+    # Group nodes display the name of their .node_tree
     elif node.type == 'GROUP' and node.node_tree:
         return node.node_tree.name
-    elif node.label:
-        return node.label
     else:
         return node.bl_label
 
