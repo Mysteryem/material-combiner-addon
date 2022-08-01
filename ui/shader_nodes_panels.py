@@ -1,21 +1,140 @@
 import bpy
+from ..utils import material_source
+from ..utils import images
+
+
+def get_node_display_label(node):
+    if node.label:
+        return node.label
+    # Custom nodes can define a draw_label function, but we're only using Blender's default nodes
+    # if hasattr(node, 'draw_label'):
+    #     return node.draw_label()
+    elif node.type == 'TEX_IMAGE' and node.image:
+        return node.image.name
+    elif node.type == 'GROUP' and node.node_tree:
+        return node.node_tree.name
+    elif node.label:
+        return node.label
+    else:
+        return node.bl_label
+
+
+def prop_holder_to_node(prop_holder):
+    if isinstance(prop_holder, bpy.types.ShaderNode):
+        return prop_holder
+    elif isinstance(prop_holder, bpy.types.NodeSocket):
+        return prop_holder.node
+    else:
+        return None
+
+
+def get_prop_holder_name(prop_holder):
+    node = prop_holder_to_node(prop_holder)
+    if node:
+        return node.name
+    elif hasattr(prop_holder, 'name'):
+        return prop_holder.name
+    elif hasattr(prop_holder, 'path_from_id'):
+        return prop_holder.path_from_id()
+    else:
+        # Generally a prop_holder will have at least one of name or path_from_id. For anything else, get the string
+        # representation.
+        # str() usually prints pointer and other info we don't really need, so use repr()
+        return repr(prop_holder)
+
+
+def get_prop_text(prop_holder):
+    if isinstance(prop_holder, bpy.types.ShaderNode):
+        return None
+    elif isinstance(prop_holder, bpy.types.NodeSocket):
+        return prop_holder.name
+    else:
+        return None
 
 
 # Only registered in Blender 2.80+
-class ShaderNodesOverridePanel(bpy.types.Panel):
-    bl_label = "Material Combiner Override"
-    bl_idname = 'SMC_PT_Shader_Nodes_Override'
+class ShaderNodesSourcePreviewPanel(bpy.types.Panel):
+    bl_label = "Material Sources"
+    bl_idname = 'SMC_PT_Shader_Nodes_Source_Preview'
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = 'MatCombiner'
+    bl_category = "MatCombiner"
+    bl_order = 0
 
     @classmethod
     def poll(cls, context):
         # Don't need to check for context.space_data.type == 'NODE_EDITOR' because it's the Panel's bl_space_type
         space_data = context.space_data
-        # Don't show when editing a group node.
-        if space_data.node_tree != space_data.edit_tree:
-            return False
+        # Only show the panel in the shader nodes window and only if the current material has nodes.
+        if space_data.tree_type == 'ShaderNodeTree':
+            if hasattr(context, 'material'):
+                mat = context.material
+                if mat:
+                    node_tree = mat.node_tree
+                    if node_tree:
+                        return node_tree.nodes
+        return False
+
+    @staticmethod
+    def draw_prop_holder(context, layout, prop_tuple, label_prefix):
+        layout.label(text=label_prefix)
+        box = layout.box()
+        prop_holder = prop_tuple.prop_holder
+        node = prop_holder_to_node(prop_holder)
+        if node:
+            node_in_current_tree = context.space_data.edit_tree == node.id_data
+            row = box.row()
+            row.label(text="{}".format(get_node_display_label(node)),
+                      icon='NODE_SEL' if node_in_current_tree and node.select else 'NODE')
+            col = row.column()
+            col.enabled = node_in_current_tree
+            col.operator('smc.shader_nodes_frame_node', icon='VIEWZOOM', text='').node_name = node.name
+        else:
+            icon = 'MATERIAL' if isinstance(prop_holder, bpy.types.Material) else 'BLANK1'
+            box.label(text="{}".format(get_prop_holder_name(prop_holder)), icon=icon)
+        row = box.row()
+        row.prop(prop_holder, prop_tuple.path, text=get_prop_text(prop_holder))
+        prop = prop_tuple.resolve()
+        # Extra UI for generated_color for blank generated images without pending changes
+        if isinstance(prop, bpy.types.Image) and images.is_single_colour_generated(prop):
+            row = box.row()
+            row.prop(prop, 'generated_color')
+
+    def draw(self, context):
+        layout = self.layout
+
+        mat = context.material
+        mat_src = material_source.MaterialSource.from_material(mat)
+        if mat_src:
+            img_prop = mat_src.image
+            if img_prop:
+                ShaderNodesSourcePreviewPanel.draw_prop_holder(context, layout, img_prop, "Base color: ")
+            color_prop = mat_src.color
+            if color_prop:
+                ShaderNodesSourcePreviewPanel.draw_prop_holder(
+                    context, layout, color_prop, "Diffuse color: " if img_prop else "Base color: ")
+        else:
+            layout.label(text="No material source(s) found", icon='ERROR')
+            if mat.smc_override_node_name and mat.smc_override_node_name in mat.node_tree.nodes:
+                layout.label(text="Try changing the override", icon='BLANK1')
+            else:
+                layout.label(text="Try setting an override", icon='BLANK1')
+
+
+# Only registered in Blender 2.80+
+class ShaderNodesOverridePanel(bpy.types.Panel):
+    bl_label = "Search Override"
+    bl_idname = 'SMC_PT_Shader_Nodes_Override'
+    bl_space_type = 'NODE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "MatCombiner"
+    bl_order = 1
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        # Don't need to check for context.space_data.type == 'NODE_EDITOR' because it's the Panel's bl_space_type
+        space_data = context.space_data
         # Only show the panel in the shader nodes window and only if the current material has nodes.
         if space_data.tree_type == 'ShaderNodeTree':
             if hasattr(context, 'material'):
@@ -27,42 +146,60 @@ class ShaderNodesOverridePanel(bpy.types.Panel):
         return False
 
     def draw(self, context):
-        layout = self.layout
-        layout.label(text="Override search start node")
-        row = layout.row()
-        # draw button to set active node to material combiner override
-        row.operator('smc.shader_nodes_set_active_as_override')
-        # draw button to select material combiner override (the operator should disable the button via its poll
-        #   function when there is no current override)
-        row.operator('smc.shader_nodes_set_override_as_active')
-
-        row = layout.row()
-        # draw button to clear the material combiner override
-        row.operator('smc.shader_nodes_clear_override')
-        # draw button to frame (view) the material combiner override
-        row.operator('smc.shader_nodes_frame_override')
-
-        layout.separator()
         mat = context.material
-        override_name = mat.smc_override_node_name
-        if override_name:
-            layout.label(text="Override node:")
-            node_tree = mat.node_tree
-            override_node = node_tree.nodes.get(mat.smc_override_node_name)
-            box = layout.box()
-            if override_node:
-                # Display the same displayed label of the node as an expandable header
-                wm = context.window_manager
-                box.prop(wm, "smc_override_node_toggle_full_view", emboss=False,
-                         icon="TRIA_DOWN" if wm.smc_override_node_toggle_full_view else "TRIA_RIGHT",
-                         text=override_node.label if override_node.label else override_node.bl_label)
-                # If expanded show the full view of the node
-                if wm.smc_override_node_toggle_full_view:
-                    # Draw the node in the same way as the Surface panel in Material Properties, but without the input
-                    # the override_node's output is connected to
-                    box.template_node_view(mat.node_tree, override_node, None)
-            else:
-                box.label(text="Node '{}' not found".format(override_name))
+        layout = self.layout
+        if not mat.use_nodes:
+            layout.label(text="Material does not use nodes")
+            layout.prop(mat, "use_nodes", icon='NODETREE')
         else:
-            layout.label(text="No override set")
-            layout.label(text="Using active output node(s)")
+            col = layout.column(align=True)
+            row = col.row(align=True)
+            # SET
+            # draw button to set active node to material combiner override
+            row.operator('smc.shader_nodes_set_active_as_override')
+            # CLEAR
+            # draw button to clear the material combiner override
+            row.operator('smc.shader_nodes_clear_override')
+
+            row = col.row(align=True)
+            # SELECT
+            # draw button to select material combiner override (the operator should disable the button via its poll
+            #   function when there is no current override)
+            row.operator('smc.shader_nodes_set_override_as_active')
+            # VIEW
+            # draw button to frame (view) the material combiner override
+            row.operator('smc.shader_nodes_frame_override')
+
+            override_name = mat.smc_override_node_name
+            # Acts as a layout.separator(), but sometimes we later decide to add labels here
+            col_pre = layout.column()
+            layout.label(text="Override node:")
+            box = layout.box()
+            if override_name:
+                node_tree = mat.node_tree
+                override_node = node_tree.nodes.get(mat.smc_override_node_name)
+                if override_node:
+                    # Display the same displayed label of the node as an expandable header
+                    wm = context.window_manager
+                    box.prop(wm, "smc_override_node_toggle_full_view", emboss=False,
+                             icon="TRIA_DOWN" if wm.smc_override_node_toggle_full_view else "TRIA_RIGHT",
+                             text=get_node_display_label(override_node))
+                    # If expanded show the full view of the node
+                    if wm.smc_override_node_toggle_full_view:
+                        # Draw the node in the same way as the Surface panel in Material Properties, but without the input
+                        # the override_node's output is connected to
+                        box.template_node_view(mat.node_tree, override_node, None)
+                    mat_src = material_source.MaterialSource.from_node(override_node)
+                    if not mat_src:
+                        # Add labels before the override node because any labels or other UI below the node are likely
+                        # to be hidden from view when the full view of the node is shown
+                        col_pre.label(text="No sources found from override", icon='ERROR')
+                        col_pre.label(text="Using active output node(s)", icon='INFO')
+                else:
+                    col_pre.label(text="Override not found", icon='ERROR')
+                    col_pre.label(text="Using active output node(s)", icon='INFO')
+                    box.enabled = False
+                    box.label(text="'{}' not found".format(override_name), icon='REMOVE')
+            else:
+                box.enabled = False
+                box.label(icon='REMOVE')

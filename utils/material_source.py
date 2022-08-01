@@ -84,26 +84,27 @@ class MaterialSource:
     # already in scene linear colorspace it's less work to convert only the single_color_generated images that are in
     # sRGB to Linear.
     def to_sort_key(self, multiply_by_diffuse: bool):
-        if self.image:
-            if is_single_colour_generated(self.image):
+        img = self.to_image_value()
+        if img:
+            if is_single_colour_generated(img):
                 target_colorspace = 'Linear'
                 if multiply_by_diffuse:
                     if self.color:
-                        combined_converted_color = single_color_generated_to_color(self.image, self.to_color_value(),
+                        combined_converted_color = single_color_generated_to_color(img, self.to_color_value(),
                                                                                    target_colorspace=target_colorspace)
                         return '', to_255_scale_tuple(combined_converted_color)
                     else:
-                        converted_color = single_color_generated_to_color(self.image,
+                        converted_color = single_color_generated_to_color(img,
                                                                           target_colorspace=target_colorspace)
                         return '', to_255_scale_tuple(converted_color)
                 else:
-                    converted_color = single_color_generated_to_color(self.image, target_colorspace=target_colorspace)
+                    converted_color = single_color_generated_to_color(img, target_colorspace=target_colorspace)
                     return '', to_255_scale_tuple(converted_color)
             else:
                 if multiply_by_diffuse:
-                    return self.image.name, to_255_scale_tuple(self.to_color_value())
+                    return img.name, to_255_scale_tuple(self.to_color_value())
                 else:
-                    return self.image.name, MaterialSource.opaque_white
+                    return img.name, MaterialSource.opaque_white
         else:
             # Images can't be named '', so '' works to indicate that there is no image
             return '', to_255_scale_tuple(self.to_color_value())
@@ -120,6 +121,9 @@ class MaterialSource:
             return color_value
         else:
             return MaterialSource.opaque_white
+
+    def to_image_value(self):
+        return self.image.resolve() if self.image else None
 
     @staticmethod
     def merge_color_and_tex(color_source: 'MaterialSource', tex_source: 'MaterialSource'):
@@ -193,7 +197,7 @@ class MaterialSource:
                     return MaterialSource.from_node(link.from_node)
         elif node.type == 'TEX_IMAGE':
             if node.image:
-                return MaterialSource(image=node.image)
+                return MaterialSource(image=PropTuple(node, 'image'))
         elif node.type == 'RGB':
             return MaterialSource(color=PropTuple(node.outputs[0], 'default_value'))
         elif node.type in {'BSDF_PRINCIPLED', 'EEVEE_SPECULAR'}:
@@ -242,7 +246,7 @@ class MaterialSource:
         else:
             print("Unable to find {} input of {} group node {}. Perhaps the addon the group node is from has been"
                   " updated or the group node has been modified by the user"
-                  .format(socket_name, group_node.node_tree.name, group_node))
+                  .format(socket_name, group_node.node_tree.name, repr(group_node)))
             return MaterialSource()
 
     @staticmethod
