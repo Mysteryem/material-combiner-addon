@@ -6,9 +6,9 @@ from ..utils import images
 def get_node_display_label(node):
     if node.label:
         return node.label
-    # Custom nodes can define a draw_label function, but we're only using Blender's default nodes
-    # if hasattr(node, 'draw_label'):
-    #     return node.draw_label()
+    # Custom nodes can define a draw_label function
+    elif hasattr(node, 'draw_label'):
+        return node.draw_label()
     elif node.type == 'TEX_IMAGE' and node.image:
         return node.image.name
     elif node.type == 'GROUP' and node.node_tree:
@@ -17,39 +17,6 @@ def get_node_display_label(node):
         return node.label
     else:
         return node.bl_label
-
-
-def prop_holder_to_node(prop_holder):
-    if isinstance(prop_holder, bpy.types.ShaderNode):
-        return prop_holder
-    elif isinstance(prop_holder, bpy.types.NodeSocket):
-        return prop_holder.node
-    else:
-        return None
-
-
-def get_prop_holder_name(prop_holder):
-    node = prop_holder_to_node(prop_holder)
-    if node:
-        return node.name
-    elif hasattr(prop_holder, 'name'):
-        return prop_holder.name
-    elif hasattr(prop_holder, 'path_from_id'):
-        return prop_holder.path_from_id()
-    else:
-        # Generally a prop_holder will have at least one of name or path_from_id. For anything else, get the string
-        # representation.
-        # str() usually prints pointer and other info we don't really need, so use repr()
-        return repr(prop_holder)
-
-
-def get_prop_text(prop_holder):
-    if isinstance(prop_holder, bpy.types.ShaderNode):
-        return None
-    elif isinstance(prop_holder, bpy.types.NodeSocket):
-        return prop_holder.name
-    else:
-        return None
 
 
 # Only registered in Blender 2.80+
@@ -76,11 +43,18 @@ class ShaderNodesSourcePreviewPanel(bpy.types.Panel):
         return False
 
     @staticmethod
-    def draw_prop_holder(context, layout, prop_tuple, label_prefix):
-        layout.label(text=label_prefix)
+    def draw_prop_holder(context, layout, prop_tuple, source_header):
+        layout.label(text=source_header)
         box = layout.box()
         prop_holder = prop_tuple.prop_holder
-        node = prop_holder_to_node(prop_holder)
+
+        if isinstance(prop_holder, bpy.types.ShaderNode):
+            node = prop_holder
+        elif isinstance(prop_holder, bpy.types.NodeSocket):
+            node = prop_holder.node
+        else:
+            node = None
+
         if node:
             node_in_current_tree = context.space_data.edit_tree == node.id_data
             row = box.row()
@@ -91,9 +65,25 @@ class ShaderNodesSourcePreviewPanel(bpy.types.Panel):
             col.operator('smc.shader_nodes_frame_node', icon='VIEWZOOM', text='').node_name = node.name
         else:
             icon = 'MATERIAL' if isinstance(prop_holder, bpy.types.Material) else 'BLANK1'
-            box.label(text="{}".format(get_prop_holder_name(prop_holder)), icon=icon)
+            if hasattr(prop_holder, 'name'):
+                # .name is likely to be a string, but cast to be sure
+                text = str(prop_holder.name)
+            elif hasattr(prop_holder, 'path_from_id'):
+                # .path_from_id() is likely to be a string, but cast to be sure
+                text = str(prop_holder.path_from_id())
+            else:
+                # Generally a prop_holder will have at least one of name or path_from_id. For anything else, get the
+                # string representation.
+                # str() usually prints pointer and not much useful info, so use repr()
+                text = repr(prop_holder)
+            box.label(text=text, icon=icon)
+
         row = box.row()
-        row.prop(prop_holder, prop_tuple.path, text=get_prop_text(prop_holder))
+        # Usually we want to display the name of the property in the UI (the default), but when the prop_holder is a
+        # NodeSocket, the property is usually 'default_value' which isn't very useful, instead, the name of the socket
+        # is more useful
+        text = prop_holder.name if isinstance(prop_holder, bpy.types.NodeSocket) else None
+        row.prop(prop_holder, prop_tuple.path, text=text)
         prop = prop_tuple.resolve()
         # Extra UI for generated_color for blank generated images without pending changes
         if isinstance(prop, bpy.types.Image) and images.is_single_colour_generated(prop):
@@ -108,11 +98,11 @@ class ShaderNodesSourcePreviewPanel(bpy.types.Panel):
         if mat_src:
             img_prop = mat_src.image
             if img_prop:
-                ShaderNodesSourcePreviewPanel.draw_prop_holder(context, layout, img_prop, "Base color: ")
+                ShaderNodesSourcePreviewPanel.draw_prop_holder(context, layout, img_prop, "Base color:")
             color_prop = mat_src.color
             if color_prop:
                 ShaderNodesSourcePreviewPanel.draw_prop_holder(
-                    context, layout, color_prop, "Diffuse color: " if img_prop else "Base color: ")
+                    context, layout, color_prop, "Diffuse color:" if img_prop else "Base color:")
         else:
             layout.label(text="No material source(s) found", icon='ERROR')
             if mat.smc_override_node_name and mat.smc_override_node_name in mat.node_tree.nodes:
