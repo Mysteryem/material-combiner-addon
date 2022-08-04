@@ -43,8 +43,8 @@ class ShaderNodesSourcePreviewPanel(bpy.types.Panel):
         return False
 
     @staticmethod
-    def draw_prop_holder(context, layout, prop_tuple, source_header):
-        layout.label(text=source_header)
+    def draw_prop_holder(context, layout, prop_tuple, source_name):
+        layout.label(text=source_name + ":")
         box = layout.box()
         prop_holder = prop_tuple.prop_holder
 
@@ -56,10 +56,15 @@ class ShaderNodesSourcePreviewPanel(bpy.types.Panel):
             node = None
 
         if node:
+            # When there's a node, we change the icon according to whether the node is selected (and in the current
+            # edit_tree) and we add a button to focus the view on the node
             node_in_current_tree = context.space_data.edit_tree == node.id_data
             row = box.row()
             row.label(text="{}".format(get_node_display_label(node)),
                       icon='NODE_SEL' if node_in_current_tree and node.select else 'NODE')
+            # The operator can't disable itself based on its node_name argument because the poll method is a classmethod
+            # Instead, we'll disable the UI when we know the node isn't in the current edit_tree
+            # To disable only the operator button we need to put it in its own sub-layout, so create a column for it
             col = row.column()
             col.enabled = node_in_current_tree
             col.operator('smc.shader_nodes_frame_node', icon='VIEWZOOM', text='').node_name = node.name
@@ -77,16 +82,20 @@ class ShaderNodesSourcePreviewPanel(bpy.types.Panel):
                 # str() usually prints pointer and not much useful info, so use repr()
                 text = repr(prop_holder)
             box.label(text=text, icon=icon)
-
+        # Placing Color props directly into the box puts the property name and color UI on different lines for some
+        # reason. Creating a row in the box and putting the prop in that row keeps them both on the same line.
         row = box.row()
-        # Usually we want to display the name of the property in the UI (the default), but when the prop_holder is a
-        # NodeSocket, the property is usually 'default_value' which isn't very useful, instead, the name of the socket
-        # is more useful
+        # Usually we want to display the name of the property in the UI (typically the default text used when set to
+        # None), but when the prop_holder is a NodeSocket, the property is usually 'default_value' which isn't very
+        # useful, instead, the name of the socket is more useful, especially since when prop_holder is a socket, we
+        # display the node it belongs to instead of the socket itself.
         text = prop_holder.name if isinstance(prop_holder, bpy.types.NodeSocket) else None
         row.prop(prop_holder, prop_tuple.path, text=text)
         prop = prop_tuple.resolve()
         # Extra UI for generated_color for blank generated images without pending changes
         if isinstance(prop, bpy.types.Image) and images.is_single_colour_generated(prop):
+            # As with before, placing the Color prop directly in the box puts the name and color UI on different lines
+            # for some reason. Placing it in a row in the box seems to work though.
             row = box.row()
             row.prop(prop, 'generated_color')
 
@@ -97,15 +106,19 @@ class ShaderNodesSourcePreviewPanel(bpy.types.Panel):
         mat_src = material_source.MaterialSource.from_material(mat)
         if mat_src:
             img_prop = mat_src.image
+            # If there is an image, it will always be the Base color source so place it before a color
             if img_prop:
-                ShaderNodesSourcePreviewPanel.draw_prop_holder(context, layout, img_prop, "Base color:")
+                ShaderNodesSourcePreviewPanel.draw_prop_holder(context, layout, img_prop, "Base color")
             color_prop = mat_src.color
+            # If there's no image, the color will be used as Base color, otherwise, it will be used as Diffuse color,
+            # which optionally multiplies with the Base color during atlas creation
             if color_prop:
                 ShaderNodesSourcePreviewPanel.draw_prop_holder(
-                    context, layout, color_prop, "Diffuse color:" if img_prop else "Base color:")
+                    context, layout, color_prop, "Diffuse color" if img_prop else "Base color")
         else:
             layout.label(text="No material source(s) found", icon='ERROR')
-            if mat.smc_override_node_name and mat.smc_override_node_name in mat.node_tree.nodes:
+            # Blank icons are used to keep the same spacing
+            if mat.smc_override_node_name:
                 layout.label(text="Try changing the override", icon='BLANK1')
             else:
                 layout.label(text="Try setting an override", icon='BLANK1')
@@ -113,7 +126,7 @@ class ShaderNodesSourcePreviewPanel(bpy.types.Panel):
 
 # Only registered in Blender 2.80+
 class ShaderNodesOverridePanel(bpy.types.Panel):
-    bl_label = "Search Override"
+    bl_label = "Search Start Override"
     bl_idname = 'SMC_PT_Shader_Nodes_Override'
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
@@ -191,5 +204,7 @@ class ShaderNodesOverridePanel(bpy.types.Panel):
                     box.enabled = False
                     box.label(text="'{}' not found".format(override_name), icon='REMOVE')
             else:
+                col_pre.label(text="No override set", icon='INFO')
+                col_pre.label(text="Using active output node(s)", icon='BLANK1')
                 box.enabled = False
                 box.label(icon='REMOVE')

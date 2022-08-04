@@ -8,6 +8,28 @@ from .images import is_single_colour_generated, single_color_generated_to_color
 from .textures import get_image, get_texture
 from ..globs import debug_print
 
+# Node types where the main color input is 'Color'
+color_input_node_types = {
+    'BSDF_ANISOTROPIC',
+    'BSDF_DIFFUSE',
+    'BSDF_GLASS',
+    'BSDF_GLOSSY',
+    'BSDF_HAIR_PRINCIPLED',
+    'BSDF_REFRACTION',
+    'BSDF_TRANSLUCENT',
+    'BSDF_TRANSPARENT',
+    'BSDF_TOON',
+    'BSDF_VELVET',
+    'Emission',
+    'SUBSURFACE_SCATTERING',
+}
+
+# Node types where the main color input is 'Base Color'
+base_color_input_node_types = {
+    'BSDF_PRINCIPLED',
+    'EEVEE_SPECULAR',
+}
+
 
 # Could create the PropTuple class using namedtuple(...) separately and then add the resolve method to it
 # afterwards, but it confuses PyCharm into thinking the method doesn't exist, so the method has been added to a subclass
@@ -200,12 +222,11 @@ class MaterialSource:
                 return MaterialSource(image=PropTuple(node, 'image'))
         elif node.type == 'RGB':
             return MaterialSource(color=PropTuple(node.outputs[0], 'default_value'))
-        elif node.type in {'BSDF_PRINCIPLED', 'EEVEE_SPECULAR'}:
+        elif node.type in base_color_input_node_types:
             return MaterialSource.from_color_input_socket(node.inputs['Base Color'])
-        elif node.type in {'Emission', 'BSDF_DIFFUSE', 'BSDF_GLASS', 'BSDF_GLOSSY', 'BSDF_REFRACTION',
-                           'SUBSURFACE_SCATTERING', 'BSDF_TRANSLUCENT', 'BSDF_TRANSPARENT'}:
-            # BSDF_GLASS, BSDF_REFRACTION and BSDF_TRANSPARENT may produce unexpected results
-            # The strength value in Emission is ignored
+        elif node.type in color_input_node_types:
+            # Since the inputs other than Color are ignored, it can result in unexpected results when the other
+            # properties can drastically change the appearance, such as with BSDF_REFRACTION or BSDF_TRANSPARENT
             return MaterialSource.from_color_input_socket(node.inputs['Color'])
         elif node.type == 'GROUP':
             return MaterialSource.from_group_node(node)
