@@ -5,7 +5,7 @@ import bpy
 from bpy.types import bpy_prop_collection, Image, ShaderNode, ShaderNodeTree, ShaderNodeGroup, NodeSocketColor, Material
 
 from .images import is_single_colour_generated, single_color_generated_to_color
-from .textures import get_image, get_texture
+from .textures import has_image, get_texture
 from ..globs import debug_print
 
 # Node types where the main color input is 'Color'
@@ -265,7 +265,7 @@ class MaterialSource:
         if isinstance(socket, NodeSocketColor):
             return MaterialSource.from_color_input_socket(socket)
         else:
-            print("Unable to find {} input of {} group node {}. Perhaps the addon the group node is from has been"
+            print("Unable to find '{}' input of '{}' group node '{}'. Perhaps the addon the group node is from has been"
                   " updated or the group node has been modified by the user"
                   .format(socket_name, group_node.node_tree.name, repr(group_node)))
             return MaterialSource()
@@ -286,12 +286,12 @@ class MaterialSource:
             return MaterialSource.from_image_and_color_group_inputs(
                 group_node, MaterialSource.vrm_color_input_name, MaterialSource.vrm_image_input_name)
         else:
-            print("Unsupported group node for getting MaterialSource {}".format(node_tree_name))
+            debug_print("DEBUG: Unsupported group node '{}' for getting MaterialSource".format(node_tree_name))
             return MaterialSource()
 
     @staticmethod
     def from_material(mat: Material):
-        debug_print("DEBUG: Getting material source data for {}".format(mat))
+        debug_print("DEBUG: Getting material source data for '{}'".format(mat))
         if mat:
             if bpy.app.version >= (2, 80):
                 if mat.use_nodes:
@@ -299,9 +299,10 @@ class MaterialSource:
                 else:
                     return MaterialSource(color=PropTuple(mat, 'diffuse_color'))
             else:
-                image = get_image(get_texture(mat))
+                tex = get_texture(mat)
+                image_prop = PropTuple(tex, 'image') if has_image(tex) else None
                 prop_holder = mat
                 prop_name = 'diffuse_color'
-                return MaterialSource(image=image, color=PropTuple(prop_holder, prop_name))
+                return MaterialSource(image=image_prop, color=PropTuple(prop_holder, prop_name))
         else:
             return MaterialSource()
